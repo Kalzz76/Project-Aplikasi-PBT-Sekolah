@@ -1,0 +1,497 @@
+import 'package:flutter/material.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_colors.dart';
+import '../../models/user.dart';
+import '../../models/schedule.dart';
+import '../../models/school_class.dart';
+import '../../models/subject.dart';
+import '../../providers/app_provider.dart';
+import '../../widgets/custom_card.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/custom_badge.dart';
+
+class GroupedSchedule {
+  final List<ScheduleEntry> entries;
+  final String timeRange;
+  final String label;
+  final bool isEvent;
+
+  GroupedSchedule({
+    required this.entries,
+    required this.timeRange,
+    required this.label,
+    this.isEvent = false,
+  });
+}
+
+class DashboardGuru extends StatefulWidget {
+  const DashboardGuru({super.key});
+
+  @override
+  State<DashboardGuru> createState() => _DashboardGuruState();
+}
+
+class _DashboardGuruState extends State<DashboardGuru> {
+  bool _isWeeklyMode = false;
+
+  List<GroupedSchedule> _groupSchedules(List<ScheduleEntry> schedules, AppProvider provider, String day) {
+    if (schedules.isEmpty) return [];
+    
+    // Sort by slot index to ensure correct order
+    final slots = provider.getTimeSlots(day);
+    schedules.sort((a, b) {
+      final idxA = slots.indexWhere((s) => s.label == a.slotLabel);
+      final idxB = slots.indexWhere((s) => s.label == b.slotLabel);
+      return idxA.compareTo(idxB);
+    });
+
+    List<GroupedSchedule> grouped = [];
+    if (schedules.isEmpty) return [];
+
+    List<ScheduleEntry> currentGroup = [schedules[0]];
+
+    for (int i = 1; i < schedules.length; i++) {
+      final prev = schedules[i - 1];
+      final curr = schedules[i];
+
+      // Check if they are consecutive in the timeSlots list
+      final idxPrev = slots.indexWhere((s) => s.label == prev.slotLabel);
+      final idxCurr = slots.indexWhere((s) => s.label == curr.slotLabel);
+
+      bool isConsecutive = (idxCurr == idxPrev + 1);
+      bool sameSubject = prev.subjectId == curr.subjectId && prev.classId == curr.classId && !prev.isEvent && !curr.isEvent;
+
+      if (isConsecutive && sameSubject) {
+        currentGroup.add(curr);
+      } else {
+        grouped.add(_createGroup(currentGroup, slots));
+        currentGroup = [curr];
+      }
+    }
+    grouped.add(_createGroup(currentGroup, slots));
+
+    return grouped;
+  }
+
+  GroupedSchedule _createGroup(List<ScheduleEntry> group, List<TimeSlot> slots) {
+    final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel);
+    final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel);
+    
+    final startTime = firstSlot.timeRange.split(' - ')[0];
+    final endTime = lastSlot.timeRange.split(' - ')[1];
+    
+    String label = group.first.slotLabel;
+    if (group.length > 1) {
+      // Extract numeric part if possible, e.g. "Jam 1" -> "1"
+      final startNum = group.first.slotLabel.replaceAll(RegExp(r'[^0-9]'), '');
+      final endNum = group.last.slotLabel.replaceAll(RegExp(r'[^0-9]'), '');
+      if (startNum.isNotEmpty && endNum.isNotEmpty) {
+        label = 'Jam $startNum - $endNum';
+      } else {
+        label = '${group.first.slotLabel} - ${group.last.slotLabel}';
+      }
+    }
+
+    return GroupedSchedule(
+      entries: group,
+      timeRange: '$startTime - $endTime',
+      label: label,
+      isEvent: group.first.isEvent,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<AppProvider>(context);
+    final user = provider.currentUser;
+    final today = provider.currentDayName;
+    final allSchedules = provider.getTeacherSchedules(user.id);
+    final todaySchedules = provider.getTeacherSchedules(user.id, day: today);
+    final groupedToday = _groupSchedules(todaySchedules, provider, today);
+    
+    // Check for calls
+    final myCalls = provider.calls.where((c) => c.teacherId == user.id).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildGreetingBanner(user.name),
+        const SizedBox(height: 32),
+        
+        if (myCalls.isNotEmpty) ...[
+          ...myCalls.map((call) => _buildCallBanner(call, provider)).toList(),
+          const SizedBox(height: 32),
+        ] else ...[
+          _buildEmergencyCallSection(),
+          const SizedBox(height: 32),
+        ],
+        
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _isWeeklyMode ? 'Jadwal Mengajar Mingguan' : 'Jadwal Mengajar Hari Ini ($today)',
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+            ),
+            _buildModeToggle(),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        if (_isWeeklyMode)
+          _buildWeeklySchedule(allSchedules, provider)
+        else
+          _buildDailyScheduleGrid(groupedToday, provider),
+      ],
+    );
+  }
+
+  Widget _buildModeToggle() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          _toggleItem('Hari Ini', !_isWeeklyMode),
+          _toggleItem('Mingguan', _isWeeklyMode),
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleItem(String label, bool active) {
+    return InkWell(
+      onTap: () => setState(() => _isWeeklyMode = label == 'Mingguan'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(color: active ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(8), boxShadow: active ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)] : []),
+        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: active ? AppColors.primary : AppColors.textSecondary)),
+      ),
+    );
+  }
+
+  Widget _buildGreetingBanner(String name) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF4F46E5), Color(0xFF3730A3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: const Color(0xFF3730A3).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.sun, color: Colors.amber, size: 28),
+              const SizedBox(width: 12),
+              Text('Selamat Pagi, $name!', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text('Tetap semangat mengajar demi masa depan bangsa. Jadwal Anda sudah siap.', style: TextStyle(color: Color(0xFFDBEAFE), fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmergencyCallSection() {
+    return CustomCard(
+      color: const Color(0xFFFEF2F2),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(LucideIcons.megaphone, color: Colors.red, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text('Panggilan dari Siswa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF991B1B))),
+                Text('Belum ada panggilan bantuan dari kelas saat ini.', style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C))),
+              ],
+            ),
+          ),
+          CustomButton(
+            variant: ButtonVariant.ghost,
+            size: ButtonSize.sm,
+            child: const Text('Lihat Riwayat', style: TextStyle(color: Color(0xFF991B1B))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCallBanner(CallNotification call, AppProvider provider) {
+    return CustomCard(
+      color: const Color(0xFFFEF2F2),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(LucideIcons.megaphone, color: Colors.red, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Panggilan dari ${call.className}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF991B1B))),
+                Text(
+                  'Sekretaris ${call.senderName} memanggil Anda${call.subjectName != null ? " — ${call.subjectName}" : ""}.',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                ),
+              ],
+            ),
+          ),
+          CustomButton(
+            variant: ButtonVariant.ghost,
+            size: ButtonSize.sm,
+            onClick: () => provider.dismissCall(call.id),
+            child: const Text('Terima', style: TextStyle(color: Color(0xFF991B1B))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyScheduleGrid(List<GroupedSchedule> groupedSchedules, AppProvider provider) {
+    if (groupedSchedules.isEmpty) {
+      return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Tidak ada jadwal mengajar hari ini.')));
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 450, mainAxisSpacing: 24, crossAxisSpacing: 24, mainAxisExtent: 280),
+      itemCount: groupedSchedules.length,
+      itemBuilder: (context, index) {
+        final group = groupedSchedules[index];
+        final entry = group.entries.first;
+        final isOngoing = provider.isScheduleGroupActive(group.entries, provider.currentDayName);
+
+        if (group.isEvent) {
+          return _buildEventCard(group);
+        }
+
+        final subject = provider.subjects.firstWhere((s) => s.id == entry.subjectId || s.name == entry.subjectId, orElse: () => Subject(id: '', name: 'Mapel', teacherIds: []));
+        final cls = provider.classes.firstWhere((c) => c.id == entry.classId || c.name == entry.classId, orElse: () => SchoolClass(id: '', name: 'Kelas', homeroomTeacherId: '', homeroomTeacherName: '', roomName: '', totalStudents: 0));
+
+        // Check if marked by secretary
+        final markedAttendance = provider.attendance.where((a) => a.classId == entry.classId && a.subjectId == subject.name && a.date.day == DateTime.now().day).toList();
+        final isAlreadyMarked = markedAttendance.isNotEmpty;
+        final markedBySec = provider.isAttendanceFilledBySecretary(entry.classId, subject.name);
+        final guruBlocked = markedBySec;
+
+        return CustomCard(
+          noPadding: true,
+          child: Stack(
+            children: [
+              if (isOngoing && !isAlreadyMarked)
+                Positioned(
+                  top: 0, right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: const BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.only(bottomLeft: Radius.circular(16))),
+                    child: const Text('SEDANG BERJALAN', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        CustomBadge(variant: isOngoing ? BadgeVariant.indigo : BadgeVariant.defaultValue, child: Text(group.label)),
+                        Text(group.timeRange, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(cls.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    Text(subject.name, style: const TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.mapPin, size: 16, color: AppColors.textMuted),
+                          const SizedBox(width: 8),
+                          Text('Ruangan: ${provider.roomDisplayName(entry, cls)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    if (guruBlocked)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(LucideIcons.lock, color: Colors.orange, size: 20),
+                            SizedBox(width: 8),
+                            Text('DIISI SEKRETARIS', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                      )
+                    else if (isAlreadyMarked)
+                      CustomButton(
+                        width: double.infinity,
+                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
+                        icon: const Icon(LucideIcons.clipboardCheck, size: 18),
+                        onClick: isOngoing
+                            ? () {
+                                provider.setActiveScheduleForSession(entry);
+                                provider.startAttendanceSession(cls, subject);
+                              }
+                            : null,
+                        child: Text(isOngoing ? 'Ubah Absensi' : 'Edit saat jam pelajaran'),
+                      )
+                    else
+                      CustomButton(
+                        width: double.infinity,
+                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
+                        icon: const Icon(LucideIcons.clipboardCheck, size: 18),
+                        onClick: isOngoing
+                            ? () {
+                                provider.setActiveScheduleForSession(entry);
+                                provider.startAttendanceSession(cls, subject);
+                              }
+                            : null,
+                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : 'Belum Waktunya'),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEventCard(GroupedSchedule group) {
+    final entry = group.entries.first;
+    final isBreak = entry.customTitle?.toLowerCase().contains('istirahat') ?? false;
+    return CustomCard(
+      color: isBreak ? const Color(0xFFF8FAFC) : const Color(0xFFECFDF5),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(isBreak ? LucideIcons.coffee : LucideIcons.star, color: isBreak ? AppColors.textSecondary : Colors.teal, size: 32),
+          const SizedBox(height: 12),
+          Text(entry.customTitle ?? 'Kegiatan', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          const SizedBox(height: 4),
+          Text('${group.label} (${group.timeRange})', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklySchedule(List<ScheduleEntry> allSchedules, AppProvider provider) {
+    final days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+    return Column(
+      children: days.map((day) {
+        final daySchedules = allSchedules.where((s) => s.day == day).toList();
+        if (daySchedules.isEmpty) return const SizedBox.shrink();
+        
+        final groupedDay = _groupSchedules(daySchedules, provider, day);
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: CustomCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(LucideIcons.calendar, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 12),
+                    Text(day, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ...groupedDay.map((group) {
+                  final s = group.entries.first;
+                  if (group.isEvent) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Container(width: 100, child: Text(group.timeRange, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
+                          const SizedBox(width: 16),
+                          Expanded(child: Text(s.customTitle ?? 'Kegiatan', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 14))),
+                        ],
+                      ),
+                    );
+                  }
+                  final cls = provider.classes.firstWhere((c) => c.id == s.classId || c.name == s.classId);
+                  final sub = provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId);
+                  
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(width: 100, child: Text(group.timeRange, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(cls.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text(sub.name, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(6)),
+                          child: Text(s.roomId ?? cls.roomName, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _showAttendanceDialog(BuildContext context, SchoolClass cls, Subject sub) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Absensi ${cls.name}'),
+        content: Container(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Mata Pelajaran: ${sub.name}'),
+              const SizedBox(height: 16),
+              const Text('Fitur pengisian absensi per siswa akan muncul di sini sesuai data kelas.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
+          CustomButton(onClick: () => Navigator.pop(context), child: const Text('Simpan Absensi')),
+        ],
+      ),
+    );
+  }
+}
