@@ -1,24 +1,23 @@
 import 'dart:typed_data';
-
 import 'package:excel/excel.dart';
-
 import '../models/import_student_row.dart';
 
 class StudentImportService {
   /// Membaca file .xlsx atau .csv menjadi baris siswa.
-  static List<ImportStudentRow> parseFile(Uint8List bytes, String extension) {
+  static List<ImportStudentRow> parseFile(Uint8List bytes, String extension, String fileName) {
     final ext = extension.toLowerCase().replaceAll('.', '');
     if (ext == 'csv') {
-      return _parseCsv(String.fromCharCodes(bytes));
+      return _parseCsv(String.fromCharCodes(bytes), fileName);
     }
     if (ext == 'xlsx') {
-      return _parseExcel(bytes);
+      return _parseExcel(bytes, fileName);
     }
     throw FormatException('Format tidak didukung. Gunakan file .xlsx atau .csv');
   }
 
-  static List<ImportStudentRow> _parseExcel(Uint8List bytes) {
-    final workbook = Excel.decodeBytes(bytes);
+  static List<ImportStudentRow> _parseExcel(Uint8List bytes, String fileName) {
+    final cleanBytes = Uint8List.fromList(bytes);
+    final workbook = Excel.decodeBytes(cleanBytes);
     if (workbook.tables.isEmpty) {
       throw FormatException('File Excel kosong atau tidak memiliki sheet.');
     }
@@ -27,28 +26,34 @@ class StudentImportService {
     final sheetName = workbook.tables.keys.first;
     final sheet = workbook.tables[sheetName];
     
-    if (sheet == null || sheet.rows.isEmpty) {
+    final rows = sheet?.rows;
+    if (sheet == null || rows == null || rows.isEmpty) {
       throw FormatException('Sheet "$sheetName" tidak berisi data.');
     }
 
-    final tableRows = sheet.rows
-        .where((row) => row != null) // Safety check for null rows
-        .map((row) => row!.map(_cellText).toList())
+    // Highly null-safe row parsing avoiding the bang (!) operator on potentially null rows
+    final tableRows = rows
+        .map((row) => row?.map(_cellText).toList() ?? <String>[])
         .where((row) => row.any((c) => c.isNotEmpty))
         .toList();
 
-    return _rowsFromTable(tableRows);
+    return _rowsFromTable(tableRows, fileName);
   }
 
   static String _cellText(Data? cell) {
-    // Handling based on excel package Data structure
     if (cell == null) return '';
     final val = cell.value;
     if (val == null) return '';
-    return val.toString().trim();
+    
+    String str = val.toString().trim();
+    // Clean up .0 from integers parsed as doubles (like NIS/NISN)
+    if (RegExp(r'^\d+\.0$').hasMatch(str)) {
+      str = str.substring(0, str.length - 2);
+    }
+    return str;
   }
 
-  static List<ImportStudentRow> _parseCsv(String content) {
+  static List<ImportStudentRow> _parseCsv(String content, String fileName) {
     final lines = content.split(RegExp(r'\r?\n'));
     final tableRows = <List<String>>[];
     for (final line in lines) {
@@ -56,7 +61,7 @@ class StudentImportService {
       if (trimmed.isEmpty) continue;
       tableRows.add(_splitCsvLine(trimmed));
     }
-    return _rowsFromTable(tableRows);
+    return _rowsFromTable(tableRows, fileName);
   }
 
   static List<String> _splitCsvLine(String line) {
@@ -66,34 +71,87 @@ class StudentImportService {
     return line.split(';').map((e) => e.trim()).toList();
   }
 
-  static List<ImportStudentRow> _rowsFromTable(List<List<String>> tableRows) {
+  static String extractClassName(String fileName) {
+    final cleanName = fileName.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final regex = RegExp(r'(X|XI|XII)[\s_]+[A-Za-z0-9]+[\s_]+\d+');
+    final match = regex.firstMatch(cleanName);
+    if (match != null) {
+      return match.group(0)!.replaceAll('_', ' ').toUpperCase();
+    }
+    final regexSimple = RegExp(r'(X|XI|XII)[\s_]+[A-Za-z\s0-9]+');
+    final matchSimple = regexSimple.firstMatch(cleanName);
+    if (matchSimple != null) {
+      return matchSimple.group(0)!.replaceAll('_', ' ').trim().toUpperCase();
+    }
+    return '';
+  }
+
+  static List<ImportStudentRow> _rowsFromTable(List<List<String>> tableRows, String fileName) {
     if (tableRows.isEmpty) return [];
 
-    var startIndex = 0;
+    int headerIndex = -1;
     Map<String, int> columns = {};
 
-    if (_looksLikeHeader(tableRows.first)) {
-      columns = _mapHeaderColumns(tableRows.first);
-      startIndex = 1;
-    } else {
-      columns = _defaultColumns(tableRows.first.length);
+    // Scan for a row that actually looks like a real header
+    for (var i = 0; i < tableRows.length; i++) {
+      final row = tableRows[i];
+      // A header row must have at least 3 non-empty cells
+      if (row.where((c) => c.isNotEmpty).length < 3) continue;
+
+      if (_looksLikeHeader(row)) {
+        headerIndex = i;
+        columns = _mapHeaderColumns(row);
+        break;
+      }
     }
 
+    int startIndex = 0;
+    if (headerIndex != -1) {
+      startIndex = headerIndex + 1;
+    } else {
+      // No header found, try to find the first row with at least 3 non-empty cells
+      for (var i = 0; i < tableRows.length; i++) {
+        if (tableRows[i].where((c) => c.isNotEmpty).length >= 3) {
+          startIndex = i;
+          columns = _defaultColumns(tableRows[i].length);
+          break;
+        }
+      }
+    }
+
+    final extractedKelas = extractClassName(fileName);
     final result = <ImportStudentRow>[];
+
     for (var i = startIndex; i < tableRows.length; i++) {
       final row = tableRows[i];
       if (row.every((c) => c.isEmpty)) continue;
 
-      final nis = _valueAt(row, columns['nis']);
+      var nis = _valueAt(row, columns['nis']);
+      var nisn = _valueAt(row, columns['nisn']);
       final name = _valueAt(row, columns['name']);
-      final kelas = _valueAt(row, columns['kelas']);
+      var kelas = _valueAt(row, columns['kelas']);
+
+      // 1. Handle split NIS/NISN if they are merged in one column (e.g. "102419349 / 0089761823")
+      if (nis.contains('/') || nisn.contains('/')) {
+        final mergedVal = nis.contains('/') ? nis : nisn;
+        final parts = mergedVal.split('/');
+        if (parts.length >= 2) {
+          nis = parts[0].trim();
+          nisn = parts[1].trim();
+        }
+      }
+
+      // 2. Handle fallback class name from file name if the 'kelas' column is missing or empty
+      if (kelas.isEmpty && extractedKelas.isNotEmpty) {
+        kelas = extractedKelas;
+      }
 
       if (nis.isEmpty && name.isEmpty) continue;
       if (nis.isEmpty || name.isEmpty || kelas.isEmpty) continue;
 
       result.add(ImportStudentRow(
         nis: nis,
-        nisn: _valueAt(row, columns['nisn']),
+        nisn: nisn,
         name: name,
         gender: _normalizeGender(_valueAt(row, columns['gender'])),
         kelas: kelas,
@@ -103,31 +161,51 @@ class StudentImportService {
   }
 
   static bool _looksLikeHeader(List<String> row) {
-    final joined = row.join(' ').toLowerCase();
-    return joined.contains('nis') ||
-        joined.contains('nama') ||
-        joined.contains('kelas') ||
-        joined.contains('jenis');
+    int matchCount = 0;
+    for (final cell in row) {
+      final c = cell.toLowerCase().trim();
+      if (c == 'no' || c == 'no.') continue;
+      if (c.contains('nisn')) {
+        matchCount++;
+      } else if (c.contains('nis')) {
+        matchCount++;
+      } else if (c.contains('nama') || c.contains('name')) {
+        matchCount++;
+      } else if (c.contains('kelas') || c.contains('class')) {
+        matchCount++;
+      } else if (c.contains('jenis') || c == 'jk' || c.contains('kelamin') || c == 'l/p') {
+        matchCount++;
+      }
+    }
+    return matchCount >= 2;
   }
 
   static Map<String, int> _mapHeaderColumns(List<String> header) {
     final map = <String, int>{};
     for (var i = 0; i < header.length; i++) {
-      final h = header[i].toLowerCase();
+      final h = header[i].toLowerCase().trim();
+      // Use individual ifs to capture if a column is both (e.g. "NIS / NISN")
       if (h.contains('nisn')) {
         map['nisn'] = i;
-      } else if (h.contains('nis')) {
+      }
+      if (h.contains('nis')) {
         map['nis'] = i;
-      } else if (h.contains('nama')) {
+      }
+      if (h.contains('nama') || h.contains('name')) {
         map['name'] = i;
-      } else if (h.contains('jenis') || h == 'jk' || h.contains('kelamin') || h == 'l/p') {
+      }
+      if (h.contains('jenis') || h == 'jk' || h.contains('kelamin') || h == 'l/p') {
         map['gender'] = i;
-      } else if (h.contains('kelas')) {
+      }
+      if (h.contains('kelas') || h.contains('class')) {
         map['kelas'] = i;
       }
     }
     if (!map.containsKey('nis') || !map.containsKey('name') || !map.containsKey('kelas')) {
-      return _defaultColumns(header.length);
+      final defs = _defaultColumns(header.length);
+      map.putIfAbsent('nis', () => defs['nis'] ?? 0);
+      map.putIfAbsent('name', () => defs['name'] ?? 1);
+      map.putIfAbsent('kelas', () => defs['kelas'] ?? 3);
     }
     map.putIfAbsent('nisn', () => -1);
     map.putIfAbsent('gender', () => -1);

@@ -16,6 +16,7 @@ import 'admin/modul_data_ruangan.dart';
 import 'admin/modul_mata_pelajaran.dart';
 import 'admin/modul_jadwal_pelajaran.dart';
 import 'admin/modul_laporan_absensi.dart';
+import 'admin/modul_chronos.dart';
 import 'guru/dashboard_guru.dart';
 import 'guru/modul_rekap_absensi.dart';
 import 'guru/halaman_absensi.dart';
@@ -28,37 +29,49 @@ class MainLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = Provider.of<AppProvider>(context);
 
-    if (!provider.isLoggedIn) {
-      return const LoginView();
-    }
-
     return Scaffold(
-      backgroundColor: provider.isDarkMode ? const Color(0xFF0F172A) : AppColors.background,
-      body: Row(
-        children: [
-          const Sidebar(),
-          Expanded(
-            child: Column(
-              children: [
-                const Header(),
-                Expanded(
-                  child: Container(
-                    color: provider.isDarkMode ? const Color(0xFF0F172A) : AppColors.background,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(32),
-                      child: Center(
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 1600),
-                          child: _buildContent(context),
+      backgroundColor: Colors.transparent, // Background will be drawn by body
+      body: Container(
+        decoration: provider.isDarkMode 
+          ? const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0F172A), // Deep Slate
+                  Color(0xFF1E1B4B), // Deep Indigo
+                  Color(0xFF020617), // Black Slate
+                ],
+              ),
+            )
+          : const BoxDecoration(color: AppColors.background),
+        child: Row(
+          children: [
+            const Sidebar(),
+            Expanded(
+              child: Column(
+                children: [
+                  const Header(),
+                  Expanded(
+                    child: Container(
+                      // Transparan di dark mode agar background gradient terlihat, solid di light mode
+                      color: provider.isDarkMode ? Colors.transparent : AppColors.background,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Container(
+                            constraints: const BoxConstraints(maxWidth: 1600),
+                            child: _buildContent(context),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -93,6 +106,8 @@ class MainLayout extends StatelessWidget {
           return const ModulLaporanAbsensi();
         case 'accounts':
           return const ModulManajemenAkun();
+        case 'chronos':
+          return const ModulChronos();
         default:
           return const DashboardAdmin();
       }

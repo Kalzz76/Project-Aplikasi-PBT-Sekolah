@@ -39,35 +39,7 @@ class MockData {
     ),
   };
 
-  static final List<Student> students = List.generate(100, (i) {
-    final firstNames = ['Rizky', 'Siti', 'Budi', 'Ayu', 'Dedi', 'Lani', 'Fajar', 'Maya', 'Agus', 'Nina', 'Hendra', 'Dewi', 'Bambang', 'Ani', 'Joko', 'Sari', 'Eko', 'Rina', 'Aditya', 'Putri'];
-    final lastNames = ['Saputra', 'Lestari', 'Wijaya', 'Kusuma', 'Pratama', 'Hidayat', 'Santoso', 'Utami', 'Nugroho', 'Sari', 'Setiawan', 'Rahmawati', 'Gunawan', 'Fitriani', 'Handoko'];
-    
-    final name = '${firstNames[i % firstNames.length]} ${lastNames[(i * 3) % lastNames.length]}';
-    
-    // Logic for Structure within a class (assuming ~35 students per class)
-    final classIdx = i % 35;
-    final positions = [
-      'Ketua Murid', 'Wakil Ketua Murid', 'Bendahara 1', 'Bendahara 2', 
-      'Sekretaris 1', 'Sekretaris 2', 'Pj Keagamaan', 'Pj Keamanan', 
-      'Pj Kebersihan', 'Pj Logistik'
-    ];
-    
-    String position = 'Anggota';
-    if (classIdx < positions.length) {
-      position = positions[classIdx];
-    }
-    
-    return Student(
-      id: 'S${i + 1}',
-      nis: '100${(i + 1).toString().padLeft(3, '0')}',
-      nisn: '00${12345678 + i}',
-      name: name,
-      gender: i % 2 == 0 ? 'L' : 'P',
-      kelas: i < 35 ? 'XI RPL 1' : i < 70 ? 'XI RPL 2' : 'XII TKJ 1',
-      position: position,
-    );
-  });
+  static final List<Student> students = [];
 
   static final List<Teacher> teachers = [
     Teacher(id: 'G01', nip: '198205052012062005', name: 'Ela Nurlaila, S.Pd', position: 'Guru Tetap', subjects: ['Sejarah', 'Ppan'], avatar: 'https://i.pravatar.cc/150?u=ela'),

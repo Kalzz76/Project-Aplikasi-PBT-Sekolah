@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
 import '../providers/app_provider.dart';
+import 'dart:ui';
 import '../models/user.dart';
 import 'custom_badge.dart';
 import 'app_avatar.dart';
@@ -14,10 +15,11 @@ class Sidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = Provider.of<AppProvider>(context);
     final currentUser = provider.currentUser;
+    final isDark = provider.isDarkMode;
 
-    return Container(
+    final sidebarContent = Container(
       width: 260,
-      color: AppColors.sidebarBg,
+      color: isDark ? Colors.black.withOpacity(0.25) : AppColors.sidebarBg,
       child: Column(
         children: [
           // Logo Header
@@ -41,7 +43,7 @@ class Sidebar extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  'Edusync',
+                  'Classio',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -113,6 +115,22 @@ class Sidebar extends StatelessWidget {
         ],
       ),
     );
+
+    if (isDark) {
+      return ClipRRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
+            ),
+            child: sidebarContent,
+          ),
+        ),
+      );
+    }
+    
+    return sidebarContent;
   }
 
   List<Widget> _buildMenus(BuildContext context, AppProvider provider) {
@@ -136,6 +154,7 @@ class Sidebar extends StatelessWidget {
         const SizedBox(height: 24),
         _buildGroupHeader('Sistem'),
         _buildMenuItem(context, provider, 'accounts', 'Manajemen Akun', LucideIcons.userPlus),
+        _buildMenuItem(context, provider, 'chronos', 'Chronos', Icons.science),
       ];
     } else if (role == UserRole.guru) {
       return [

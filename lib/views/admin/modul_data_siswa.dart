@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -69,13 +70,13 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildFieldLabel('Nama Lengkap Siswa'),
-                        TextField(controller: nameController, decoration: _inputStyle('Contoh: Ahmad Fauzi')),
+                        TextField(controller: nameController, decoration: _inputStyle('Contoh: Ahmad Fauzi'), inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))]),
                         const SizedBox(height: 20),
                         Row(
                           children: [
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NIS'), TextField(controller: nisController, decoration: _inputStyle('Nomor Induk'))])),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NIS'), TextField(controller: nisController, decoration: _inputStyle('Nomor Induk'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly])])),
                             const SizedBox(width: 16),
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NISN'), TextField(controller: nisnController, decoration: _inputStyle('Nomor Nasional'))])),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NISN'), TextField(controller: nisnController, decoration: _inputStyle('Nomor Nasional'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly])])),
                           ],
                         ),
                         const SizedBox(height: 20),
@@ -131,6 +132,18 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mohon isi semua data wajib.')));
                               return;
                             }
+                            if (RegExp(r'[0-9]').hasMatch(nameController.text)) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nama lengkap tidak boleh mengandung angka.')));
+                              return;
+                            }
+                            if (!RegExp(r'^[0-9]+$').hasMatch(nisController.text)) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIS hanya boleh diisi angka.')));
+                              return;
+                            }
+                            if (nisnController.text.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(nisnController.text)) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NISN hanya boleh diisi angka.')));
+                              return;
+                            }
                             
                             final provider = context.read<AppProvider>();
                             // Check for duplicate NIS
@@ -149,13 +162,13 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                             }
 
                             final newStudent = Student(
-                              id: isEdit ? student.id : DateTime.now().toString(),
+                              id: isEdit ? student.id : AppProvider.generateNewUuid(),
                               name: nameController.text,
                               nis: nisController.text,
                               nisn: nisnController.text,
                               gender: gender,
                               kelas: selectedKelas!,
-                              position: student?.position ?? provider.assignOrgPositionForClass(selectedKelas!),
+                              position: student?.position ?? 'Anggota',
                             );
                             if (isEdit) {
                               provider.updateStudent(newStudent);
@@ -206,7 +219,7 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
       setState(() => _isImporting = true);
 
       final ext = platformFile.extension ?? 'xlsx';
-      final rows = StudentImportService.parseFile(bytes, ext);
+      final rows = StudentImportService.parseFile(bytes, ext, platformFile.name);
 
       setState(() => _isImporting = false);
 
@@ -260,7 +273,7 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
       if (confirmed != true || !context.mounted) return;
 
       setState(() => _isImporting = true);
-      final result = provider.importStudents(rows);
+      final result = await provider.importStudents(rows);
       setState(() => _isImporting = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -281,13 +294,56 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
           duration: const Duration(seconds: 5),
         ),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() => _isImporting = false);
+      debugPrint('IMPORT EXCEL ERROR: $e');
+      debugPrint('STACK TRACE: $stackTrace');
       if (!context.mounted) return;
+      
+      String msg = 'Terjadi kesalahan saat import: $e';
+      if (e.toString().contains('Unexpected null value') || e.toString().contains('nullCheck')) {
+        msg = 'File Excel tidak kompatibel. Silakan buka file tersebut di Microsoft Excel/Google Sheets, klik "Save" (Simpan), lalu coba import kembali.';
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Terjadi kesalahan saat import: $e')),
+        SnackBar(
+          content: Text(msg),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {},
+          ),
+        ),
       );
     }
+  }
+
+  void _confirmDelete(BuildContext context, Student student, AppProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Hapus'),
+        content: Text('Apakah Anda yakin ingin menghapus data siswa ${student.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () {
+              provider.deleteStudent(student.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Data siswa berhasil dihapus.')),
+              );
+            },
+            child: const Text('Ya, Hapus'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -325,6 +381,15 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
             ),
             Row(
               children: [
+                if (provider.students.isNotEmpty) ...[
+                  CustomButton(
+                    variant: ButtonVariant.outline,
+                    icon: const Icon(LucideIcons.trash2, size: 18, color: Colors.red),
+                    onClick: () => _showClearAllConfirmDialog(context, provider),
+                    child: const Text('Kosongkan Siswa', style: TextStyle(color: Colors.red)),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 CustomButton(
                   variant: ButtonVariant.outline,
                   icon: const Icon(LucideIcons.fileDown, size: 18),
@@ -419,7 +484,7 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                   separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final student = pagedStudents[index];
-                    return _buildStudentRow(student);
+                    return _buildStudentRow(student, provider);
                   },
                 ),
               ),
@@ -456,34 +521,37 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
   }
 
   Widget _buildTableHeader() {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-      color: const Color(0xFFF8FAFC),
+      color: isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC),
       child: Row(
-        children: const [
-          Expanded(flex: 5, child: Text('NIS / NISN', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 6, child: Text('NAMA LENGKAP', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 1, child: Text('L/P', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 2, child: Text('KELAS', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 1, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+        children: [
+          Expanded(flex: 5, child: Text('NIS / NISN', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 6, child: Text('NAMA LENGKAP', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 1, child: Text('L/P', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 2, child: Text('KELAS', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 1, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
         ],
       ),
     );
   }
 
-  Widget _buildStudentRow(Student student) {
+  Widget _buildStudentRow(Student student, AppProvider provider) {
+    final isDark = provider.isDarkMode;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       child: Row(
         children: [
-          Expanded(flex: 5, child: Text('${student.nis} / ${student.nisn}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
-          Expanded(flex: 6, child: Text(student.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
-          Expanded(flex: 1, child: Text(student.gender)),
+          Expanded(flex: 5, child: Text('${student.nis} / ${student.nisn}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)))),
+          Expanded(flex: 6, child: Text(student.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.getTextColor(isDark)))),
+          Expanded(flex: 1, child: Text(student.gender, style: TextStyle(color: AppColors.getTextColor(isDark)))),
           Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: CustomBadge(variant: BadgeVariant.indigo, child: Text(student.kelas)))),
           Expanded(flex: 1, child: Row(children: [
             IconButton(onPressed: () => _showStudentForm(context, student: student), icon: const Icon(LucideIcons.pencil, size: 18, color: AppColors.primary), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             const SizedBox(width: 8),
-            const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger),
+            IconButton(onPressed: () => _confirmDelete(context, student, provider), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
           ])),
         ],
       ),
@@ -536,6 +604,65 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(value == 'L' ? LucideIcons.user : LucideIcons.user, size: 16, color: isSelected ? AppColors.primary : AppColors.textMuted), const SizedBox(width: 8), Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? AppColors.primary : AppColors.textSecondary))]),
         ),
       ),
+    );
+  }
+
+  void _showClearAllConfirmDialog(BuildContext context, AppProvider provider) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(LucideIcons.trash2, color: Colors.red, size: 28),
+              SizedBox(width: 8),
+              Text('Hapus Semua Siswa?', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'Apakah Anda yakin ingin menghapus seluruh data siswa di sekolah ini? Tindakan ini akan mengosongkan seluruh data siswa dan absensi di database Supabase secara permanen dan tidak dapat dibatalkan.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                
+                // Show loading indicator
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                );
+                
+                await provider.clearAllStudents();
+                
+                // Close loading indicator
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Seluruh data siswa berhasil dihapus!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Ya, Hapus Semua', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

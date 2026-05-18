@@ -42,6 +42,8 @@ dependencies:
   pdf: ^3.11.3
   file_saver: ^0.2.14
   file_picker: ^8.1.7
+  supabase_flutter: ^2.12.4
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -59,11 +61,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
   uses-material-design: true
+  assets:
+    - .env
 
   # To add assets to your application, add an assets section, like this:
   # assets:

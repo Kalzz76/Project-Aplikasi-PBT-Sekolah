@@ -13,6 +13,7 @@ import '../../models/student.dart';
 import '../../models/school_class.dart';
 import '../../widgets/export_attendance_dialog.dart';
 import '../../services/attendance_export_service.dart';
+import '../../core/chronos_service.dart';
 
 class ModulLaporanAbsensi extends StatefulWidget {
   const ModulLaporanAbsensi({super.key});
@@ -23,8 +24,8 @@ class ModulLaporanAbsensi extends StatefulWidget {
 
 class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
   int _activeTab = 0; // 0: Monitor Harian, 1: Rekap Bulanan
-  DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now();
+  DateTime _startDate = ChronosService.instance.now();
+  DateTime _endDate = ChronosService.instance.now();
   String _dailyRange = 'Hari Ini';
   String? _detailClassId; // If null, show summary. If not null, show detail for this class.
   
@@ -32,7 +33,7 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
   void initState() {
     super.initState();
     // Default range: Today
-    _startDate = DateTime.now();
+    _startDate = ChronosService.instance.now();
     _endDate = _startDate;
   }
 
@@ -177,9 +178,9 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
                 setState(() {
                   _dailyRange = v!;
                   if (_dailyRange == 'Hari Ini') {
-                    _startDate = DateTime.now();
+                    _startDate = ChronosService.instance.now();
                   } else {
-                    _startDate = DateTime.now().subtract(const Duration(days: 1));
+                    _startDate = ChronosService.instance.now().subtract(const Duration(days: 1));
                   }
                   _endDate = _startDate;
                 });
@@ -627,7 +628,7 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
                   studentId: '', 
                   classId: '', 
                   subjectId: '', 
-                  date: DateTime.now(), 
+                  date: ChronosService.instance.now(), 
                   status: AttendanceStatus.alpa,
                   markedBy: '',
                   markedByRole: '',

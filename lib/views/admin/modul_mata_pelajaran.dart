@@ -24,6 +24,30 @@ class _ModulMataPelajaranState extends State<ModulMataPelajaran> {
   final int _itemsPerPage = 10;
   DataSortOption _sortOption = DataSortOption.nameAsc;
 
+  void _confirmDelete(BuildContext context, Subject sub) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Hapus'),
+        content: Text('Apakah Anda yakin ingin menghapus mata pelajaran ${sub.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () {
+              context.read<AppProvider>().deleteSubject(sub.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Mata pelajaran berhasil dihapus.')),
+              );
+            },
+            child: const Text('Ya, Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showSubjectForm(BuildContext context, {Subject? subject}) {
     final isEdit = subject != null;
     final nameController = TextEditingController(text: subject?.name ?? '');
@@ -69,7 +93,7 @@ class _ModulMataPelajaranState extends State<ModulMataPelajaran> {
                           }
 
                           final newSub = Subject(
-                            id: isEdit ? subject.id : DateTime.now().toString(),
+                            id: isEdit ? subject.id : AppProvider.generateNewUuid(),
                             name: nameController.text,
                             teacherIds: [], // Relational logic shifted to Teacher side
                           );
@@ -200,36 +224,40 @@ class _ModulMataPelajaranState extends State<ModulMataPelajaran> {
   }
 
   Widget _buildTableHeader() {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-      color: const Color(0xFFF8FAFC),
+      color: isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC),
       child: Row(
-        children: const [
-          Expanded(flex: 1, child: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 8, child: Text('NAMA MATA PELAJARAN', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 3, child: Text('JUMLAH GURU', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 2, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+        children: [
+          Expanded(flex: 1, child: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 8, child: Text('NAMA MATA PELAJARAN', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 3, child: Text('JUMLAH GURU', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 2, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
         ],
       ),
     );
   }
 
   Widget _buildSubjectRow(Subject sub, int no, int teacherCount) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return InkWell(
       onTap: () => setState(() => _selectedSubjectId = sub.id),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
         child: Row(
           children: [
-            Expanded(flex: 1, child: Text('$no', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted))),
-            Expanded(flex: 8, child: Text(sub.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
+            Expanded(flex: 1, child: Text('$no', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white30 : AppColors.textMuted))),
+            Expanded(flex: 8, child: Text(sub.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.getTextColor(isDark)))),
             Expanded(flex: 3, child: Align(alignment: Alignment.centerLeft, child: CustomBadge(variant: BadgeVariant.indigo, child: Text('$teacherCount Guru')))),
             Expanded(flex: 2, child: Row(children: [
               IconButton(onPressed: () => _showSubjectForm(context, subject: sub), icon: const Icon(LucideIcons.pencil, size: 18, color: AppColors.primary), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
               const SizedBox(width: 12),
-              IconButton(onPressed: () => setState(() => _selectedSubjectId = sub.id), icon: const Icon(LucideIcons.eye, size: 18, color: AppColors.textSecondary), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+              IconButton(onPressed: () => setState(() => _selectedSubjectId = sub.id), icon: Icon(LucideIcons.eye, size: 18, color: isDark ? Colors.white70 : AppColors.textSecondary), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
               const SizedBox(width: 12),
-              IconButton(onPressed: () => context.read<AppProvider>().deleteSubject(sub.id), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+              IconButton(onPressed: () => _confirmDelete(context, sub), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             ])),
           ],
         ),
@@ -238,6 +266,8 @@ class _ModulMataPelajaranState extends State<ModulMataPelajaran> {
   }
 
   Widget _buildDetailMapel(Subject sub, List<Teacher> teachers) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -270,7 +300,7 @@ class _ModulMataPelajaranState extends State<ModulMataPelajaran> {
           ),
         ),
         const SizedBox(height: 40),
-        const Text('Daftar Guru Pengampu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+        Text('Daftar Guru Pengampu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
         const SizedBox(height: 24),
         if (teachers.isEmpty)
           CustomCard(child: const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Belum ada guru yang ditugaskan untuk mata pelajaran ini.'))))
@@ -293,9 +323,9 @@ class _ModulMataPelajaranState extends State<ModulMataPelajaran> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(t.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          Text(t.name, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
                           const SizedBox(height: 4),
-                          Text('NIP. ${t.nip}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          Text('NIP. ${t.nip}', style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : AppColors.textMuted)),
                         ],
                       ),
                     ),

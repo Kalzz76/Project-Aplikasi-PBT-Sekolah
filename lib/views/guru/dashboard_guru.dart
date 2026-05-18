@@ -7,6 +7,7 @@ import '../../models/schedule.dart';
 import '../../models/school_class.dart';
 import '../../models/subject.dart';
 import '../../providers/app_provider.dart';
+import '../../core/chronos_service.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_badge.dart';
@@ -123,7 +124,7 @@ class _DashboardGuruState extends State<DashboardGuru> {
           ...myCalls.map((call) => _buildCallBanner(call, provider)).toList(),
           const SizedBox(height: 32),
         ] else ...[
-          _buildEmergencyCallSection(),
+          _buildEmergencyCallSection(provider.isDarkMode),
           const SizedBox(height: 32),
         ],
         
@@ -132,9 +133,9 @@ class _DashboardGuruState extends State<DashboardGuru> {
           children: [
             Text(
               _isWeeklyMode ? 'Jadwal Mengajar Mingguan' : 'Jadwal Mengajar Hari Ini ($today)',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode)),
             ),
-            _buildModeToggle(),
+            _buildModeToggle(provider.isDarkMode),
           ],
         ),
         const SizedBox(height: 24),
@@ -147,26 +148,42 @@ class _DashboardGuruState extends State<DashboardGuru> {
     );
   }
 
-  Widget _buildModeToggle() {
+  Widget _buildModeToggle(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9), 
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
-          _toggleItem('Hari Ini', !_isWeeklyMode),
-          _toggleItem('Mingguan', _isWeeklyMode),
+          _toggleItem('Hari Ini', !_isWeeklyMode, isDark),
+          _toggleItem('Mingguan', _isWeeklyMode, isDark),
         ],
       ),
     );
   }
 
-  Widget _toggleItem(String label, bool active) {
+  Widget _toggleItem(String label, bool active, bool isDark) {
     return InkWell(
       onTap: () => setState(() => _isWeeklyMode = label == 'Mingguan'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: active ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(8), boxShadow: active ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)] : []),
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: active ? AppColors.primary : AppColors.textSecondary)),
+        decoration: BoxDecoration(
+          color: active 
+              ? (isDark ? Colors.white.withOpacity(0.1) : Colors.white) 
+              : Colors.transparent, 
+          borderRadius: BorderRadius.circular(8), 
+          boxShadow: active && !isDark ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)] : [],
+        ),
+        child: Text(
+          label, 
+          style: TextStyle(
+            fontSize: 13, 
+            fontWeight: FontWeight.bold, 
+            color: active ? AppColors.primary : (isDark ? Colors.white70 : AppColors.textSecondary),
+          ),
+        ),
       ),
     );
   }
@@ -197,39 +214,9 @@ class _DashboardGuruState extends State<DashboardGuru> {
     );
   }
 
-  Widget _buildEmergencyCallSection() {
+  Widget _buildEmergencyCallSection(bool isDark) {
     return CustomCard(
-      color: const Color(0xFFFEF2F2),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
-            child: const Icon(LucideIcons.megaphone, color: Colors.red, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text('Panggilan dari Siswa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF991B1B))),
-                Text('Belum ada panggilan bantuan dari kelas saat ini.', style: TextStyle(fontSize: 13, color: Color(0xFFB91C1C))),
-              ],
-            ),
-          ),
-          CustomButton(
-            variant: ButtonVariant.ghost,
-            size: ButtonSize.sm,
-            child: const Text('Lihat Riwayat', style: TextStyle(color: Color(0xFF991B1B))),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCallBanner(CallNotification call, AppProvider provider) {
-    return CustomCard(
-      color: const Color(0xFFFEF2F2),
+      color: isDark ? Colors.red.withOpacity(0.15) : const Color(0xFFFEF2F2),
       child: Row(
         children: [
           Container(
@@ -242,10 +229,41 @@ class _DashboardGuruState extends State<DashboardGuru> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Panggilan dari ${call.className}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF991B1B))),
+                Text('Panggilan dari Siswa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.redAccent : const Color(0xFF991B1B))),
+                Text('Belum ada panggilan bantuan dari kelas saat ini.', style: TextStyle(fontSize: 13, color: isDark ? Colors.red.shade200 : const Color(0xFFB91C1C))),
+              ],
+            ),
+          ),
+          CustomButton(
+            variant: ButtonVariant.ghost,
+            size: ButtonSize.sm,
+            child: Text('Lihat Riwayat', style: TextStyle(color: isDark ? Colors.redAccent : const Color(0xFF991B1B))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCallBanner(CallNotification call, AppProvider provider) {
+    final isDark = provider.isDarkMode;
+    return CustomCard(
+      color: isDark ? Colors.red.withOpacity(0.15) : const Color(0xFFFEF2F2),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(LucideIcons.megaphone, color: Colors.red, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Panggilan dari ${call.className}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isDark ? Colors.redAccent : const Color(0xFF991B1B))),
                 Text(
                   'Sekretaris ${call.senderName} memanggil Anda${call.subjectName != null ? " — ${call.subjectName}" : ""}.',
-                  style: const TextStyle(fontSize: 13, color: Color(0xFFB91C1C)),
+                  style: TextStyle(fontSize: 13, color: isDark ? Colors.red.shade200 : const Color(0xFFB91C1C)),
                 ),
               ],
             ),
@@ -254,7 +272,7 @@ class _DashboardGuruState extends State<DashboardGuru> {
             variant: ButtonVariant.ghost,
             size: ButtonSize.sm,
             onClick: () => provider.dismissCall(call.id),
-            child: const Text('Terima', style: TextStyle(color: Color(0xFF991B1B))),
+            child: Text('Terima', style: TextStyle(color: isDark ? Colors.redAccent : const Color(0xFF991B1B))),
           ),
         ],
       ),
@@ -272,19 +290,21 @@ class _DashboardGuruState extends State<DashboardGuru> {
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 450, mainAxisSpacing: 24, crossAxisSpacing: 24, mainAxisExtent: 280),
       itemCount: groupedSchedules.length,
       itemBuilder: (context, index) {
+        final isDark = provider.isDarkMode;
         final group = groupedSchedules[index];
         final entry = group.entries.first;
         final isOngoing = provider.isScheduleGroupActive(group.entries, provider.currentDayName);
 
         if (group.isEvent) {
-          return _buildEventCard(group);
+          return _buildEventCard(group, provider.isDarkMode);
         }
 
         final subject = provider.subjects.firstWhere((s) => s.id == entry.subjectId || s.name == entry.subjectId, orElse: () => Subject(id: '', name: 'Mapel', teacherIds: []));
         final cls = provider.classes.firstWhere((c) => c.id == entry.classId || c.name == entry.classId, orElse: () => SchoolClass(id: '', name: 'Kelas', homeroomTeacherId: '', homeroomTeacherName: '', roomName: '', totalStudents: 0));
 
         // Check if marked by secretary
-        final markedAttendance = provider.attendance.where((a) => a.classId == entry.classId && a.subjectId == subject.name && a.date.day == DateTime.now().day).toList();
+        final today = ChronosService.instance.now();
+        final markedAttendance = provider.attendance.where((a) => a.classId == entry.classId && a.subjectId == subject.name && a.date.day == today.day && a.date.month == today.month).toList();
         final isAlreadyMarked = markedAttendance.isNotEmpty;
         final markedBySec = provider.isAttendanceFilledBySecretary(entry.classId, subject.name);
         final guruBlocked = markedBySec;
@@ -311,21 +331,25 @@ class _DashboardGuruState extends State<DashboardGuru> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         CustomBadge(variant: isOngoing ? BadgeVariant.indigo : BadgeVariant.defaultValue, child: Text(group.label)),
-                        Text(group.timeRange, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+                        Text(group.timeRange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary)),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    Text(cls.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-                    Text(subject.name, style: const TextStyle(fontSize: 16, color: AppColors.textSecondary, fontWeight: FontWeight.w500)),
+                    Text(cls.name, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
+                    Text(subject.name, style: TextStyle(fontSize: 16, color: isDark ? Colors.white70 : AppColors.textSecondary, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 20),
                     Container(
                       padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+                      decoration: BoxDecoration(
+                        color: AppColors.getBgColor(isDark), 
+                        borderRadius: BorderRadius.circular(12), 
+                        border: Border.all(color: AppColors.getBorderColor(isDark)),
+                      ),
                       child: Row(
                         children: [
                           const Icon(LucideIcons.mapPin, size: 16, color: AppColors.textMuted),
                           const SizedBox(width: 8),
-                          Text('Ruangan: ${provider.roomDisplayName(entry, cls)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          Text('Ruangan: ${provider.roomDisplayName(entry, cls)}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
                         ],
                       ),
                     ),
@@ -379,19 +403,32 @@ class _DashboardGuruState extends State<DashboardGuru> {
     );
   }
 
-  Widget _buildEventCard(GroupedSchedule group) {
+  Widget _buildEventCard(GroupedSchedule group, bool isDark) {
     final entry = group.entries.first;
     final isBreak = entry.customTitle?.toLowerCase().contains('istirahat') ?? false;
     return CustomCard(
-      color: isBreak ? const Color(0xFFF8FAFC) : const Color(0xFFECFDF5),
+      color: isBreak 
+          ? (isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF8FAFC)) 
+          : (isDark ? Colors.teal.withOpacity(0.15) : const Color(0xFFECFDF5)),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(isBreak ? LucideIcons.coffee : LucideIcons.star, color: isBreak ? AppColors.textSecondary : Colors.teal, size: 32),
+          Icon(isBreak ? LucideIcons.coffee : LucideIcons.star, color: isBreak ? (isDark ? Colors.white70 : AppColors.textSecondary) : Colors.teal, size: 32),
           const SizedBox(height: 12),
-          Text(entry.customTitle ?? 'Kegiatan', textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+          Text(
+            entry.customTitle ?? 'Kegiatan', 
+            textAlign: TextAlign.center, 
+            style: TextStyle(
+              fontSize: 18, 
+              fontWeight: FontWeight.bold, 
+              color: isBreak ? AppColors.getTextColor(isDark) : (isDark ? Colors.tealAccent : Colors.teal),
+            ),
+          ),
           const SizedBox(height: 4),
-          Text('${group.label} (${group.timeRange})', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          Text(
+            '${group.label} (${group.timeRange})', 
+            style: TextStyle(fontSize: 13, color: isDark ? Colors.white60 : AppColors.textSecondary),
+          ),
         ],
       ),
     );
@@ -427,9 +464,9 @@ class _DashboardGuruState extends State<DashboardGuru> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Row(
                         children: [
-                          Container(width: 100, child: Text(group.timeRange, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
+                          Container(width: 100, child: Text(group.timeRange, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: provider.isDarkMode ? Colors.white70 : AppColors.textMuted))),
                           const SizedBox(width: 16),
-                          Expanded(child: Text(s.customTitle ?? 'Kegiatan', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 14))),
+                          Expanded(child: Text(s.customTitle ?? 'Kegiatan', style: TextStyle(fontWeight: FontWeight.bold, color: provider.isDarkMode ? Colors.tealAccent : Colors.teal, fontSize: 14))),
                         ],
                       ),
                     );
@@ -442,21 +479,21 @@ class _DashboardGuruState extends State<DashboardGuru> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(width: 100, child: Text(group.timeRange, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        Container(width: 100, child: Text(group.timeRange, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.getTextColor(provider.isDarkMode)))),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(cls.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              Text(sub.name, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                              Text(cls.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.getTextColor(provider.isDarkMode))),
+                              Text(sub.name, style: TextStyle(color: provider.isDarkMode ? Colors.white70 : AppColors.textSecondary, fontSize: 12)),
                             ],
                           ),
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(6)),
-                          child: Text(s.roomId ?? cls.roomName, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                          decoration: BoxDecoration(color: AppColors.getBgColor(provider.isDarkMode), borderRadius: BorderRadius.circular(6)),
+                          child: Text(s.roomId ?? cls.roomName, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode))),
                         ),
                       ],
                     ),

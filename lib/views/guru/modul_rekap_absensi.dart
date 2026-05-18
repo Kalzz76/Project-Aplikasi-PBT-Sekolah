@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/app_provider.dart';
+import '../../core/chronos_service.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_badge.dart';
@@ -36,7 +37,7 @@ class _ModulRekapAbsensiState extends State<ModulRekapAbsensi> {
       ...allRekap.map((e) => e.subjectId).toSet(),
     ];
 
-    final now = DateTime.now();
+    final now = ChronosService.instance.now();
     final filteredRekap = allRekap.where((r) {
       var periodMatch = true;
       if (_selectedPeriod == '1 Bulan') {
@@ -154,7 +155,7 @@ class _ModulRekapAbsensiState extends State<ModulRekapAbsensi> {
         _buildFilterDropdown('Mapel', _selectedSubject, subjects, (v) => setState(() => _selectedSubject = v!)),
         InkWell(
           onTap: () async {
-            final d = await showDatePicker(context: context, initialDate: _selectedDate ?? DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime.now());
+            final d = await showDatePicker(context: context, initialDate: _selectedDate ?? ChronosService.instance.now(), firstDate: DateTime(2020), lastDate: ChronosService.instance.now());
             if (d != null) setState(() => _selectedDate = d);
           },
           child: Container(

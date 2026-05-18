@@ -1,6 +1,6 @@
 {
-    "name": "aplikasi_administrasi_sekolah",
-    "short_name": "aplikasi_administrasi_sekolah",
+    "name": "Classio",
+    "short_name": "Classio",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

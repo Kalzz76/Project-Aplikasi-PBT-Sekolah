@@ -24,6 +24,30 @@ class _ModulDataRuanganState extends State<ModulDataRuangan> {
 
   final List<String> _categories = ['Kelas', 'Lab Komputer', 'Laboratorium', 'Perpustakaan', 'Aula'];
 
+  void _confirmDelete(BuildContext context, Room room) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Hapus'),
+        content: Text('Apakah Anda yakin ingin menghapus ruangan ${room.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () {
+              context.read<AppProvider>().deleteRoom(room.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Data ruangan berhasil dihapus.')),
+              );
+            },
+            child: const Text('Ya, Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showRoomForm(BuildContext context, {Room? room}) {
     final isEdit = room != null;
     final nameController = TextEditingController(text: room?.name ?? '');
@@ -82,7 +106,7 @@ class _ModulDataRuanganState extends State<ModulDataRuangan> {
                             return;
                           }
 
-                          final newRoom = Room(id: isEdit ? room.id : DateTime.now().toString(), name: nameController.text, category: selectedCategory);
+                          final newRoom = Room(id: isEdit ? room.id : AppProvider.generateNewUuid(), name: nameController.text, category: selectedCategory);
                           if (isEdit) provider.updateRoom(newRoom); else provider.addRoom(newRoom);
                           Navigator.pop(context);
                         },
@@ -204,32 +228,36 @@ class _ModulDataRuanganState extends State<ModulDataRuangan> {
   }
 
   Widget _buildTableHeader() {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-      color: const Color(0xFFF8FAFC),
+      color: isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC),
       child: Row(
-        children: const [
-          Expanded(flex: 1, child: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 6, child: Text('NAMA RUANGAN', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 4, child: Text('KATEGORI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 2, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+        children: [
+          Expanded(flex: 1, child: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 6, child: Text('NAMA RUANGAN', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 4, child: Text('KATEGORI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 2, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
         ],
       ),
     );
   }
 
   Widget _buildRoomRow(Room room, int no) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       child: Row(
         children: [
-          Expanded(flex: 1, child: Text('$no', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted))),
-          Expanded(flex: 6, child: Text(room.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
+          Expanded(flex: 1, child: Text('$no', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white30 : AppColors.textMuted))),
+          Expanded(flex: 6, child: Text(room.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.getTextColor(isDark)))),
           Expanded(flex: 4, child: Align(alignment: Alignment.centerLeft, child: CustomBadge(variant: BadgeVariant.indigo, child: Text(room.category)))),
           Expanded(flex: 2, child: Row(children: [
             IconButton(onPressed: () => _showRoomForm(context, room: room), icon: const Icon(LucideIcons.pencil, size: 18, color: AppColors.primary), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             const SizedBox(width: 12),
-            IconButton(onPressed: () => context.read<AppProvider>().deleteRoom(room.id), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+            IconButton(onPressed: () => _confirmDelete(context, room), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
           ])),
         ],
       ),

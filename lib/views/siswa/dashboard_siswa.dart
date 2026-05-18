@@ -7,6 +7,7 @@ import '../../models/schedule.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_badge.dart';
+import '../../widgets/app_avatar.dart';
 
 class DashboardSiswa extends StatefulWidget {
   const DashboardSiswa({super.key});
@@ -87,9 +88,9 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
           children: [
             Text(
               _isWeeklyMode ? 'Jadwal Kelas Mingguan' : 'Jadwal Kelas Hari Ini ($today)',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode)),
             ),
-            _buildModeToggle(),
+            _buildModeToggle(provider.isDarkMode),
           ],
         ),
         const SizedBox(height: 24),
@@ -102,26 +103,42 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
     );
   }
 
-  Widget _buildModeToggle() {
+  Widget _buildModeToggle(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9), 
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         children: [
-          _toggleItem('Hari Ini', !_isWeeklyMode),
-          _toggleItem('Mingguan', _isWeeklyMode),
+          _toggleItem('Hari Ini', !_isWeeklyMode, isDark),
+          _toggleItem('Mingguan', _isWeeklyMode, isDark),
         ],
       ),
     );
   }
 
-  Widget _toggleItem(String label, bool active) {
+  Widget _toggleItem(String label, bool active, bool isDark) {
     return InkWell(
       onTap: () => setState(() => _isWeeklyMode = label == 'Mingguan'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: active ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(8), boxShadow: active ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)] : []),
-        child: Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: active ? AppColors.primary : AppColors.textSecondary)),
+        decoration: BoxDecoration(
+          color: active 
+              ? (isDark ? Colors.white.withOpacity(0.1) : Colors.white) 
+              : Colors.transparent, 
+          borderRadius: BorderRadius.circular(8), 
+          boxShadow: active && !isDark ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)] : [],
+        ),
+        child: Text(
+          label, 
+          style: TextStyle(
+            fontSize: 13, 
+            fontWeight: FontWeight.bold, 
+            color: active ? AppColors.primary : (isDark ? Colors.white70 : AppColors.textSecondary),
+          ),
+        ),
       ),
     );
   }
@@ -152,7 +169,14 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white24, width: 4),
             ),
-            child: CircleAvatar(radius: 40, backgroundImage: NetworkImage(user.avatar)),
+            child: AppAvatar(
+              radius: 40, 
+              imageUrl: user.avatar,
+              name: user.name,
+              fontSize: 32,
+              textColor: const Color(0xFF0F766E),
+              backgroundColor: Colors.white,
+            ),
           ),
         ],
       ),
@@ -162,10 +186,11 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
   Widget _buildDailyScheduleList(List<ScheduleEntry> schedules, AppProvider provider, bool isSecretary) {
     if (schedules.isEmpty) return const Center(child: Text('Tidak ada jadwal hari ini.'));
     final grouped = _groupSchedules(schedules, provider, provider.currentDayName);
+    final isDark = provider.isDarkMode;
 
     return Column(
       children: grouped.map((group) {
-        if (group.isEvent) return _buildEventRow(group);
+        if (group.isEvent) return _buildEventRow(group, isDark);
         
         final entry = group.entries.first;
         final teacher = provider.teachers.firstWhere((t) => t.id == entry.teacherId, orElse: () => provider.teachers[0]);
@@ -186,8 +211,8 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(group.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(group.timeRange, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      Text(group.label, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
+                      Text(group.timeRange, style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
                     ],
                   ),
                 ),
@@ -196,8 +221,8 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(subject.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text('Guru: ${teacher.name}', style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+                      Text(subject.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
+                      Text('Guru: ${teacher.name}', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -231,7 +256,7 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     child: const Text('Isi Absen'),
                   ),
                 ] else if (isSecretary && !isOngoing && !isMarked)
-                  const Text('Belum waktunya', style: TextStyle(fontSize: 12, color: AppColors.textMuted))
+                  Text('Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted))
                 else if (isMarked)
                   const CustomBadge(variant: BadgeVariant.success, child: Text('SUDAH ABSEN')),
               ],
@@ -242,16 +267,16 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
     );
   }
 
-  Widget _buildEventRow(GroupedSchedule group) {
+  Widget _buildEventRow(GroupedSchedule group, bool isDark) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: CustomCard(
-        color: const Color(0xFFF8FAFC),
+        color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF8FAFC),
         child: Row(
           children: [
-            Text('${group.label} (${group.timeRange})', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+            Text('${group.label} (${group.timeRange})', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textMuted)),
             const Spacer(),
-            Text(group.entries.first.customTitle ?? 'Kegiatan', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(group.entries.first.customTitle ?? 'Kegiatan', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
           ],
         ),
       ),
@@ -260,6 +285,7 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
 
   Widget _buildWeeklySchedule(List<ScheduleEntry> allSchedules, AppProvider provider) {
     final days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
+    final isDark = provider.isDarkMode;
     return Column(
       children: days.map((day) {
         final daySchedules = allSchedules.where((s) => s.day == day).toList();
@@ -280,9 +306,9 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Row(
                       children: [
-                        Container(width: 90, child: Text(group.timeRange, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                        Expanded(child: Text(group.isEvent ? (s.customTitle ?? 'Kegiatan') : provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId).name)),
-                        if (!group.isEvent) Text(s.roomId ?? 'R.?', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                        Container(width: 90, child: Text(group.timeRange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)))),
+                        Expanded(child: Text(group.isEvent ? (s.customTitle ?? 'Kegiatan') : provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId).name, style: TextStyle(color: AppColors.getTextColor(isDark)))),
+                        if (!group.isEvent) Text(s.roomId ?? 'R.?', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textMuted)),
                       ],
                     ),
                   );

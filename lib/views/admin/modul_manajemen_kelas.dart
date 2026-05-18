@@ -29,6 +29,64 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
   final TextEditingController _detailSearchController = TextEditingController();
   DataSortOption _detailSortOption = DataSortOption.nameAsc;
 
+  void _confirmDeleteClass(BuildContext context, SchoolClass cls) {
+    final provider = context.read<AppProvider>();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Hapus Kelas'),
+        content: Text('Apakah Anda yakin ingin menghapus kelas ${cls.name}?\nSiswa di dalam kelas ini tidak akan terhapus, tetapi kelasnya akan menjadi kosong.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () {
+              provider.deleteClass(cls.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Kelas berhasil dihapus.')),
+              );
+            },
+            child: const Text('Ya, Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRemoveStudentFromClass(BuildContext context, Student student) {
+    final provider = context.read<AppProvider>();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluarkan Siswa'),
+        content: Text('Apakah Anda yakin ingin mengeluarkan ${student.name} dari kelas ini?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () {
+              provider.updateStudent(Student(
+                id: student.id,
+                name: student.name,
+                nis: student.nis,
+                nisn: student.nisn,
+                gender: student.gender,
+                kelas: '-',
+                position: 'Anggota',
+              ));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Siswa berhasil dikeluarkan dari kelas.')),
+              );
+            },
+            child: const Text('Ya, Keluarkan'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showManageClassForm(BuildContext context, SchoolClass cls, List<Student> students, List<Teacher> teachers) {
     final provider = context.read<AppProvider>();
     final structure = provider.getClassStructureFromStudents(cls);
@@ -231,7 +289,7 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
 
                 final teacherObj = teachers.firstWhere((t) => t.name == selectedTeacher, orElse: () => teachers[0]);
                 final newClass = SchoolClass(
-                  id: isEdit ? cls.id : DateTime.now().toString(),
+                  id: isEdit ? cls.id : AppProvider.generateNewUuid(),
                   name: nameController.text,
                   roomName: roomController.text,
                   homeroomTeacherName: teacherObj.name,
@@ -404,6 +462,7 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
                     ),
                     const Spacer(),
                     IconButton(onPressed: () => _showClassForm(context, cls: cls), icon: const Icon(LucideIcons.pencil, size: 16, color: AppColors.primary)),
+                    IconButton(onPressed: () => _confirmDeleteClass(context, cls), icon: const Icon(LucideIcons.trash2, size: 16, color: AppColors.danger)),
                   ],
                 ),
               ],
@@ -625,10 +684,112 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
           itemBuilder: (context, index) {
             final role = kOrgStructureRoles[index];
             final meta = roleMeta[index];
-            return _buildStrukturCard(role, structure[role] ?? 'Belum Diatur', meta.$1, meta.$2);
+            return InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => _showAssignRoleDialog(context, cls, role, students),
+              child: _buildStrukturCard(role, structure[role] ?? 'Belum Diatur', meta.$1, meta.$2),
+            );
           },
         ),
       ],
+    );
+  }
+
+  void _showAssignRoleDialog(BuildContext context, SchoolClass cls, String role, List<Student> students) {
+    final provider = context.read<AppProvider>();
+    final currentHolder = students.firstWhere((s) => s.position == role, orElse: () => Student(id: '', name: 'Belum Diatur', nis: '', nisn: '', gender: '', kelas: '', position: ''));
+    
+    String? selectedStudentId = currentHolder.id.isEmpty ? null : currentHolder.id;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Container(
+            width: 400,
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(LucideIcons.userCheck, color: AppColors.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Atur Jabatan: $role',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Pilih Siswa untuk Jabatan ini:',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      value: selectedStudentId,
+                      hint: const Text('Belum Diatur / Kosongkan'),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('Belum Diatur / Kosongkan', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                        ),
+                        ...students.map((s) => DropdownMenuItem<String>(
+                          value: s.id,
+                          child: Text(s.name),
+                        )),
+                      ],
+                      onChanged: (v) => setDialogState(() => selectedStudentId = v),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CustomButton(
+                        variant: ButtonVariant.outline,
+                        onClick: () => Navigator.pop(context),
+                        child: const Text('Batal'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: CustomButton(
+                        variant: ButtonVariant.primary,
+                        onClick: () async {
+                          await provider.assignClassRole(selectedStudentId, role, cls.name);
+                          if (!context.mounted) return;
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Jabatan $role berhasil diperbarui!')),
+                          );
+                        },
+                        child: const Text('Simpan'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -710,7 +871,7 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
               ...filteredStudents.map((student) => Container(
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                 decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border, width: 0.5))),
-                child: Row(children: [Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${student.nis} / ${student.nisn}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))])), Expanded(flex: 5, child: Text(student.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))), Expanded(flex: 1, child: Text(student.gender)), Expanded(flex: 3, child: Align(alignment: Alignment.centerLeft, child: CustomBadge(variant: BadgeVariant.indigo, child: Text(student.position)))), Expanded(flex: 1, child: IconButton(onPressed: () {}, icon: const Icon(LucideIcons.trash2, size: 14, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()))]),
+                child: Row(children: [Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${student.nis} / ${student.nisn}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))])), Expanded(flex: 5, child: Text(student.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))), Expanded(flex: 1, child: Text(student.gender)), Expanded(flex: 3, child: Align(alignment: Alignment.centerLeft, child: CustomBadge(variant: BadgeVariant.indigo, child: Text(student.position)))), Expanded(flex: 1, child: IconButton(onPressed: () => _confirmRemoveStudentFromClass(context, student), icon: const Icon(LucideIcons.trash2, size: 14, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()))]),
               )).toList(),
             ],
           ),

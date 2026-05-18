@@ -1,9 +1,11 @@
+import 'chronos_service.dart';
+
 /// Utilitas jadwal & waktu pelajaran (hari kerja, jam ke, rentang waktu).
 class SchoolScheduleUtils {
   static const weekdayNames = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
   static String currentDayName() {
-    final w = DateTime.now().weekday;
+    final w = ChronosService.instance.now().weekday;
     if (w >= 1 && w <= 7) return weekdayNames[w - 1];
     return 'Senin';
   }
@@ -22,7 +24,7 @@ class SchoolScheduleUtils {
   }
 
   static DateTime? _parseClock(String raw, DateTime? base) {
-    final b = base ?? DateTime.now();
+    final b = base ?? ChronosService.instance.now();
     final normalized = raw.replaceAll('.', ':');
     final seg = normalized.split(':');
     if (seg.length < 2) return null;
@@ -35,7 +37,7 @@ class SchoolScheduleUtils {
   static bool isNowWithinRange(String timeRange) {
     final range = parseTimeRange(timeRange);
     if (range == null) return false;
-    final now = DateTime.now();
+    final now = ChronosService.instance.now();
     return !now.isBefore(range.start) && now.isBefore(range.end);
   }
 

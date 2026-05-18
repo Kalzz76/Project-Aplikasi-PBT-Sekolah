@@ -236,18 +236,38 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
             CustomButton(
               variant: ButtonVariant.outline,
               icon: const Icon(LucideIcons.userPlus, size: 18),
-              onClick: () {
-                provider.generateTeacherAccounts();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Guru berhasil di-generate!')));
+              onClick: () async {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                );
+                await provider.generateTeacherAccounts();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Guru berhasil di-generate!'), backgroundColor: Colors.green));
+                }
               },
               child: const Text('Generate Akun Guru'),
             ),
             CustomButton(
               variant: ButtonVariant.outline,
               icon: const Icon(LucideIcons.userCheck, size: 18),
-              onClick: () {
-                provider.generateStudentAccounts();
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Siswa Sekretaris berhasil di-generate!')));
+              onClick: () async {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                );
+                await provider.generateStudentAccounts();
+                if (context.mounted) {
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Siswa Sekretaris berhasil di-generate!'), backgroundColor: Colors.green));
+                }
               },
               child: const Text('Generate Akun Siswa'),
             ),
@@ -385,6 +405,7 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
   }
 
   Widget _buildTable(List<UserProfile> accounts, AppProvider provider) {
+    final isDark = provider.isDarkMode;
     return Container(
       width: double.infinity,
       child: DataTable(
@@ -392,13 +413,13 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
         columnSpacing: 40,
         headingRowHeight: 56,
         dataRowHeight: 72,
-        headingRowColor: MaterialStateProperty.all(const Color(0xFFF8FAFC)),
+        headingRowColor: MaterialStateProperty.all(isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC)),
         columns: [
-          DataColumn(label: Text('PENGGUNA', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          DataColumn(label: Text('USERNAME', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          DataColumn(label: Text('PASSWORD', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          DataColumn(label: Text('ROLE', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          DataColumn(label: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+          DataColumn(label: Text('PENGGUNA', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          DataColumn(label: Text('USERNAME', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          DataColumn(label: Text('PASSWORD', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          DataColumn(label: Text('ROLE', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          DataColumn(label: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
         ],
         rows: accounts.map((account) {
           final isAdmin = account.role == UserRole.admin;
@@ -416,14 +437,14 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(account.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      if (account.nipNis != null) Text(account.nipNis!, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                      Text(account.name, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
+                      if (account.nipNis != null) Text(account.nipNis!, style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
                     ],
                   ),
                 ],
               )),
-              DataCell(Text(account.username, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w500))),
-              DataCell(Text(account.password)),
+              DataCell(Text(account.username, style: TextStyle(color: isDark ? Colors.indigoAccent : AppColors.primary, fontWeight: FontWeight.w500))),
+              DataCell(Text(account.password, style: TextStyle(color: AppColors.getTextColor(isDark)))),
               DataCell(CustomBadge(
                 variant: account.role == UserRole.admin ? BadgeVariant.orange : (account.role == UserRole.guru ? BadgeVariant.indigo : BadgeVariant.emerald),
                 child: Text(account.role.name.toUpperCase()),
@@ -442,10 +463,10 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
                     IconButton(
                       icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger),
                       tooltip: 'Hapus Akun',
-                      onPressed: () => provider.deleteAccount(account.id),
+                      onPressed: () => _showDeleteConfirmDialog(context, provider, account),
                     ),
                   ] else 
-                    const Text('-', style: TextStyle(color: AppColors.textMuted)),
+                    Text('-', style: TextStyle(color: isDark ? Colors.white30 : AppColors.textMuted)),
                 ],
               )),
             ],
@@ -487,6 +508,64 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDeleteConfirmDialog(BuildContext context, AppProvider provider, UserProfile account) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(LucideIcons.trash2, color: Colors.red, size: 28),
+              SizedBox(width: 8),
+              Text('Hapus Akun?', style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            'Apakah Anda yakin ingin menghapus akun "${account.name}" (${account.role.name.toUpperCase()}) secara permanen dari sistem?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                Navigator.of(context).pop();
+                
+                // Show loading spinner
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                );
+                
+                await provider.deleteAccount(account.id);
+                
+                if (context.mounted) {
+                  Navigator.of(context).pop(); // dismiss loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Akun berhasil dihapus!'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Ya, Hapus', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

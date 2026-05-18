@@ -3,6 +3,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../providers/app_provider.dart';
+import '../../core/chronos_service.dart';
 import '../../models/user.dart';
 import '../../models/student.dart';
 import '../../models/attendance.dart';
@@ -81,7 +82,7 @@ class _HalamanAbsensiState extends State<HalamanAbsensi> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Absensi ${cls.name}', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-            Text('${sub.name} • ${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}', style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            Text('${sub.name} • ${ChronosService.instance.now().day}/${ChronosService.instance.now().month}/${ChronosService.instance.now().year}', style: const TextStyle(fontSize: 14, color: AppColors.textSecondary)),
           ],
         ),
       ],
@@ -233,8 +234,8 @@ class _HalamanAbsensiState extends State<HalamanAbsensi> {
     }
 
     if (isSiswa) {
-      _showReasonDialog(context, (reason) {
-        provider.saveAttendanceBatch(
+      _showReasonDialog(context, (reason) async {
+        await provider.saveAttendanceBatch(
           cls: cls,
           sub: sub,
           statuses: Map.from(_attendanceState),
@@ -242,23 +243,27 @@ class _HalamanAbsensiState extends State<HalamanAbsensi> {
           reason: reason,
           scheduleEntries: _scheduleEntries.isEmpty ? null : _scheduleEntries,
         );
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Absensi oleh Sekretaris berhasil disimpan!'), backgroundColor: Colors.green),
         );
         provider.setActiveMenu('dashboard');
       });
     } else {
-      provider.saveAttendanceBatch(
-        cls: cls,
-        sub: sub,
-        statuses: Map.from(_attendanceState),
-        user: user,
-        scheduleEntries: _scheduleEntries.isEmpty ? null : _scheduleEntries,
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Absensi berhasil disimpan!'), backgroundColor: Colors.green),
-      );
-      provider.setActiveMenu('dashboard');
+      () async {
+        await provider.saveAttendanceBatch(
+          cls: cls,
+          sub: sub,
+          statuses: Map.from(_attendanceState),
+          user: user,
+          scheduleEntries: _scheduleEntries.isEmpty ? null : _scheduleEntries,
+        );
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Absensi berhasil disimpan!'), backgroundColor: Colors.green),
+        );
+        provider.setActiveMenu('dashboard');
+      }();
     }
   }
 

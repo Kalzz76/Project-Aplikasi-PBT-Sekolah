@@ -118,7 +118,7 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
                     Expanded(child: CustomButton(variant: ButtonVariant.primary, onClick: () {
                       if (!isEventMode && (selectedSubjectId == null || selectedRoomId == null || selectedTeacherId == null)) return;
                       provider.addScheduleEntry(ScheduleEntry(
-                        id: DateTime.now().toString(),
+                        id: AppProvider.generateNewUuid(),
                         day: _selectedDay,
                         slotLabel: slotLabel,
                         classId: classId,

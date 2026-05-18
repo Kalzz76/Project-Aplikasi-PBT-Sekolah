@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -23,6 +24,30 @@ class _ModulDataGuruState extends State<ModulDataGuru> {
   int _currentPage = 1;
   final int _itemsPerPage = 10;
   DataSortOption _sortOption = DataSortOption.nameAsc;
+
+  void _confirmDelete(BuildContext context, Teacher teacher) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Konfirmasi Hapus'),
+        content: Text('Apakah Anda yakin ingin menghapus data guru ${teacher.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            onPressed: () {
+              context.read<AppProvider>().deleteTeacher(teacher.id);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Data guru berhasil dihapus.')),
+              );
+            },
+            child: const Text('Ya, Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _showTeacherForm(BuildContext context, {Teacher? teacher}) {
     final isEdit = teacher != null;
@@ -56,10 +81,10 @@ class _ModulDataGuruState extends State<ModulDataGuru> {
                 ),
                 const SizedBox(height: 32),
                 _buildFieldLabel('Nama Lengkap Guru'),
-                TextField(controller: nameController, decoration: _inputStyle('Contoh: Drs. H. Bambang')),
+                TextField(controller: nameController, decoration: _inputStyle('Contoh: Drs. H. Bambang'), inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))]),
                 const SizedBox(height: 20),
                 _buildFieldLabel('NIP'),
-                TextField(controller: nipController, decoration: _inputStyle('Nomor Induk Pegawai')),
+                TextField(controller: nipController, decoration: _inputStyle('Nomor Induk Pegawai'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
                 const SizedBox(height: 20),
                 _buildFieldLabel('Mata Pelajaran (Autocomplete)'),
                 Autocomplete<Subject>(
@@ -91,13 +116,24 @@ class _ModulDataGuruState extends State<ModulDataGuru> {
                     Expanded(child: CustomButton(variant: ButtonVariant.outline, onClick: () => Navigator.pop(context), child: const Text('Batal'))),
                     const SizedBox(width: 16),
                     Expanded(child: CustomButton(variant: ButtonVariant.primary, onClick: () {
-                      if (nameController.text.isEmpty || nipController.text.isEmpty) return;
+                      if (nameController.text.isEmpty || nipController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mohon isi Nama dan NIP.')));
+                        return;
+                      }
+                      if (RegExp(r'[0-9]').hasMatch(nameController.text)) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nama lengkap tidak boleh mengandung angka.')));
+                        return;
+                      }
+                      if (!RegExp(r'^[0-9]+$').hasMatch(nipController.text)) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIP hanya boleh diisi angka.')));
+                        return;
+                      }
                       final provider = context.read<AppProvider>();
                       if (provider.teachers.any((t) => t.nip == nipController.text && t.id != teacher?.id)) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: NIP sudah ada!')));
                         return;
                       }
-                      final newTeacher = Teacher(id: isEdit ? teacher.id : DateTime.now().toString(), nip: nipController.text, name: nameController.text, position: 'Guru Mapel', subjects: selectedSubjects, avatar: '');
+                      final newTeacher = Teacher(id: isEdit ? teacher.id : AppProvider.generateNewUuid(), nip: nipController.text, name: nameController.text, position: 'Guru Mapel', subjects: selectedSubjects, avatar: '');
                       if (isEdit) provider.updateTeacher(newTeacher); else provider.addTeacher(newTeacher);
                       Navigator.pop(context);
                     }, child: const Text('Simpan Data'))),
@@ -221,32 +257,36 @@ class _ModulDataGuruState extends State<ModulDataGuru> {
   }
 
   Widget _buildTableHeader() {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-      color: const Color(0xFFF8FAFC),
+      color: isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC),
       child: Row(
-        children: const [
-          Expanded(flex: 4, child: Text('NIP', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 7, child: Text('NAMA GURU', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 6, child: Text('MATA PELAJARAN', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
-          Expanded(flex: 2, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+        children: [
+          Expanded(flex: 4, child: Text('NIP', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 7, child: Text('NAMA GURU', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 6, child: Text('MATA PELAJARAN', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 2, child: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
         ],
       ),
     );
   }
 
   Widget _buildTeacherRow(Teacher teacher) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       child: Row(
         children: [
-          Expanded(flex: 4, child: Text(teacher.nip, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary))),
-          Expanded(flex: 7, child: Text(teacher.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary))),
+          Expanded(flex: 4, child: Text(teacher.nip, style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary))),
+          Expanded(flex: 7, child: Text(teacher.name, style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)))),
           Expanded(flex: 6, child: Wrap(spacing: 4, runSpacing: 4, children: teacher.subjects.map((s) => CustomBadge(variant: BadgeVariant.indigo, child: Text(s, style: const TextStyle(fontSize: 10)))).toList())),
           Expanded(flex: 2, child: Row(children: [
             IconButton(onPressed: () => _showTeacherForm(context, teacher: teacher), icon: const Icon(LucideIcons.pencil, size: 18, color: AppColors.primary), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
             const SizedBox(width: 12),
-            IconButton(onPressed: () => context.read<AppProvider>().deleteTeacher(teacher.id), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+            IconButton(onPressed: () => _confirmDelete(context, teacher), icon: const Icon(LucideIcons.trash2, size: 18, color: AppColors.danger), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
           ])),
         ],
       ),

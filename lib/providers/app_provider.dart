@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/school_schedule_utils.dart';
+import '../core/chronos_service.dart';
 import '../models/user.dart';
 import '../models/student.dart';
 import '../models/teacher.dart';
@@ -77,11 +79,33 @@ const kOrgStructureRoles = [
 ];
 
 class AppProvider with ChangeNotifier {
+  AppProvider() {
+    fetchEverything();
+  }
+
+  bool _isFetching = false;
+  bool get isFetching => _isFetching;
+
   UserProfile _currentUser = MockData.users['admin']!;
   String _activeMenu = 'dashboard';
   bool _isSidebarOpen = true;
   bool _isLoggedIn = false;
   bool _isDarkMode = false;
+
+  // --- Chronos ---
+  bool get chronosEnabled => ChronosService.instance.enabled;
+  int get chronosDay => ChronosService.instance.dayOfWeek;
+  int get chronosHour => ChronosService.instance.hour;
+  int get chronosMinute => ChronosService.instance.minute;
+  String get chronosDayName => ChronosService.instance.dayName;
+
+  void setChronosEnabled(bool v) { ChronosService.instance.setEnabled(v); notifyListeners(); }
+  void setChronosDay(int d) { ChronosService.instance.setDay(d); notifyListeners(); }
+  void setChronosHour(int h) { ChronosService.instance.setHour(h); notifyListeners(); }
+  void setChronosMinute(int m) { ChronosService.instance.setMinute(m); notifyListeners(); }
+
+  /// Waktu sistem (gunakan ini untuk semua fitur jadwal/absensi)
+  DateTime systemNow() => ChronosService.instance.now();
   
   List<CallNotification> _calls = [];
   List<CallNotification> get calls => _calls;
@@ -162,7 +186,7 @@ class AppProvider with ChangeNotifier {
     required String classId,
     required String subjectName,
   }) {
-    final today = DateTime.now();
+    final today = systemNow();
     return _attendance.where((a) {
       return a.classId == classId &&
           a.subjectId == subjectName &&
@@ -309,11 +333,16 @@ class AppProvider with ChangeNotifier {
     return newClass;
   }
 
-  ImportResult importStudents(List<ImportStudentRow> rows, {bool autoCreateClass = true}) {
+  Future<ImportResult> importStudents(List<ImportStudentRow> rows, {bool autoCreateClass = true}) async {
     int success = 0;
     int skipped = 0;
     int classesCreated = 0;
     final errors = <String>[];
+
+    final supabase = Supabase.instance.client;
+    final List<Map<String, dynamic>> profilesToInsert = [];
+    final List<Map<String, dynamic>> studentsToInsert = [];
+    final List<Student> studentsToInsertLocal = [];
 
     for (final row in rows) {
       if (row.name.trim().isEmpty || row.nis.trim().isEmpty) {
@@ -333,10 +362,29 @@ class AppProvider with ChangeNotifier {
       if (_classes.length > beforeCount) classesCreated++;
 
       final gender = row.gender.toUpperCase().startsWith('P') ? 'P' : 'L';
-      final position = assignOrgPositionForClass(cls.name);
+      final position = 'Anggota';
 
-      addStudent(Student(
-        id: 'S_${DateTime.now().microsecondsSinceEpoch}_$success',
+      final studentId = _generateUuidFromText('S_${row.nis}_${DateTime.now().millisecondsSinceEpoch}');
+
+      final cleanUsername = row.name.trim().split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + (row.nis.trim().length >= 2 ? row.nis.trim().substring(row.nis.trim().length - 2) : '12');
+      profilesToInsert.add({
+        'id': studentId,
+        'name': row.name.trim(),
+        'role': 'siswa',
+        'username': cleanUsername,
+      });
+
+      studentsToInsert.add({
+        'id': studentId,
+        'nis': row.nis.trim(),
+        'nisn': row.nisn.trim(),
+        'gender': gender,
+        'class_id': cls.id,
+        'position': position,
+      });
+
+      studentsToInsertLocal.add(Student(
+        id: studentId,
         nis: row.nis.trim(),
         nisn: row.nisn.trim(),
         name: row.name.trim(),
@@ -344,7 +392,25 @@ class AppProvider with ChangeNotifier {
         kelas: cls.name,
         position: position,
       ));
+
       success++;
+    }
+
+    if (profilesToInsert.isNotEmpty) {
+      try {
+        await supabase.from('profiles').insert(profilesToInsert);
+        await supabase.from('students').insert(studentsToInsert);
+
+        for (final s in studentsToInsertLocal) {
+          _students.insert(0, s);
+          _syncClassStudentCount(s.kelas);
+        }
+      } catch (e) {
+        debugPrint("Error batch inserting students: $e");
+        errors.add("Kesalahan database saat import batch: $e");
+        success = 0;
+        skipped = rows.length;
+      }
     }
 
     notifyListeners();
@@ -386,7 +452,7 @@ class AppProvider with ChangeNotifier {
           a.username.toLowerCase() == username.trim().toLowerCase() && a.id != excludeId);
 
   List<ClassAttendanceMonitor> getTodayClassMonitoring() {
-    final today = DateTime.now();
+    final today = systemNow();
     final list = _classes.map((cls) {
       final todayRecords = _attendance.where((a) =>
           a.classId == cls.id && isSameCalendarDay(a.date, today)).toList();
@@ -479,23 +545,237 @@ class AppProvider with ChangeNotifier {
   }
   
   // Student Data
-  List<Student> _students = MockData.students;
+  List<Student> _students = [];
   // Class Data
-  List<SchoolClass> _classes = MockData.classes;
+  List<SchoolClass> _classes = [];
   // Teacher Data
-  List<Teacher> _teachers = MockData.teachers;
+  List<Teacher> _teachers = [];
   // Subject Data
-  List<Subject> _subjects = MockData.subjects;
+  List<Subject> _subjects = [];
   // Room Data
   List<Room> _rooms = MockData.rooms;
   // Attendance Data
   List<Attendance> _attendance = [];
   // Schedule Data
-  List<ScheduleEntry> _schedules = MockData.schedules;
+  List<ScheduleEntry> _schedules = [];
   // Accounts Data
-  List<UserProfile> _accounts = MockData.users.values.toList();
+  List<UserProfile> _accounts = [];
   // Reset Requests
   List<ResetRequest> _resetRequests = [];
+
+  Future<void> fetchEverything() async {
+    _isFetching = true;
+    notifyListeners();
+    try {
+      final supabase = Supabase.instance.client;
+
+      // 1. Fetch Subjects
+      final dbSubjects = await supabase.from('subjects').select();
+      _subjects = dbSubjects.map<Subject>((s) => Subject(
+        id: s['id'] as String,
+        name: s['name'] as String,
+        teacherIds: [],
+      )).toList();
+
+      // 2. Fetch Teachers
+      final dbTeachers = await supabase.from('teachers').select('*, profiles(name, avatar_url), teacher_subjects(subject_id)');
+      _teachers = dbTeachers.map<Teacher>((t) {
+        final profile = t['profiles'] as Map?;
+        final tSubjects = t['teacher_subjects'] as List?;
+        
+        final subjectsList = <String>[];
+        if (tSubjects != null) {
+          for (var ts in tSubjects) {
+            final subId = ts['subject_id'] as String?;
+            final matched = _subjects.firstWhere((sub) => sub.id == subId, orElse: () => Subject(id: '', name: '', teacherIds: []));
+            if (matched.name.isNotEmpty) {
+              subjectsList.add(matched.name);
+            }
+          }
+        }
+
+        return Teacher(
+          id: t['id'] as String,
+          nip: t['nip'] as String,
+          name: profile?['name'] as String? ?? 'No Name',
+          position: 'Guru Tetap',
+          subjects: subjectsList,
+          avatar: profile?['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${t['id']}',
+        );
+      }).toList();
+
+      // Re-populate teacherIds in _subjects
+      for (var i = 0; i < _subjects.length; i++) {
+        final sub = _subjects[i];
+        final teachersForSub = _teachers.where((t) => t.subjects.contains(sub.name)).map((t) => t.id).toList();
+        _subjects[i] = Subject(
+          id: sub.id,
+          name: sub.name,
+          teacherIds: teachersForSub,
+        );
+      }
+
+      // 3. Fetch Classes
+      final dbClasses = await supabase.from('classes').select('*, teachers(profiles(name))');
+      _classes = dbClasses.map<SchoolClass>((c) {
+        final teacher = c['teachers'] as Map?;
+        final profile = teacher?['profiles'] as Map?;
+        return SchoolClass(
+          id: c['id'] as String,
+          name: c['name'] as String,
+          homeroomTeacherId: c['homeroom_teacher_id'] as String? ?? '',
+          homeroomTeacherName: profile?['name'] as String? ?? 'Belum diatur',
+          roomName: c['room_name'] as String? ?? '-',
+          totalStudents: 0,
+        );
+      }).toList();
+
+      // 4. Fetch Students
+      final dbStudents = await supabase.from('students').select('*, profiles(name, avatar_url), classes(name)');
+      _students = dbStudents.map<Student>((s) {
+        final profile = s['profiles'] as Map?;
+        final cls = s['classes'] as Map?;
+        return Student(
+          id: s['id'] as String,
+          nis: s['nis'] as String,
+          nisn: s['nisn'] as String? ?? '',
+          name: profile?['name'] as String? ?? 'No Name',
+          gender: s['gender'] as String? ?? 'L',
+          kelas: cls?['name'] as String? ?? '',
+          position: s['position'] as String? ?? 'Anggota',
+        );
+      }).toList();
+
+      // Recompute totalStudents
+      for (var i = 0; i < _classes.length; i++) {
+        final count = _students.where((s) => s.kelas == _classes[i].name).length;
+        _classes[i] = SchoolClass(
+          id: _classes[i].id,
+          name: _classes[i].name,
+          homeroomTeacherId: _classes[i].homeroomTeacherId,
+          homeroomTeacherName: _classes[i].homeroomTeacherName,
+          roomName: _classes[i].roomName,
+          totalStudents: count,
+        );
+      }
+
+      // 5. Fetch Schedules
+      final dbSchedules = await supabase.from('schedules').select('*, subjects(name)');
+      _schedules = dbSchedules.map<ScheduleEntry>((s) {
+        final subject = s['subjects'] as Map?;
+        return ScheduleEntry(
+          id: s['id'] as String,
+          day: s['day_name'] as String,
+          slotLabel: s['slot_label'] as String,
+          classId: s['class_id'] as String? ?? '',
+          subjectId: subject?['name'] as String? ?? '',
+          roomId: s['room_name'] as String? ?? '',
+          teacherId: s['teacher_id'] as String? ?? '',
+          isEvent: s['is_event'] as bool? ?? false,
+          customTitle: s['custom_title'] as String?,
+        );
+      }).toList();
+
+      // 6. Fetch Accounts
+      final dbProfiles = await supabase.from('profiles').select();
+      final List<UserProfile> loadedAccounts = [];
+      for (final p in dbProfiles) {
+        final roleStr = p['role'] as String? ?? 'siswa';
+        final role = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.siswa);
+        
+        if (role == UserRole.siswa) {
+          final student = _students.firstWhere(
+            (s) => s.id == p['id'],
+            orElse: () => Student(id: '', nis: '', nisn: '', name: '', gender: '', kelas: '', position: ''),
+          );
+          if (student.id.isEmpty || !student.position.contains('Sekretaris')) {
+            continue; // Skip regular students and dummy/orphaned student profiles
+          }
+        }
+        
+        final studentMatch = role == UserRole.siswa 
+            ? _students.firstWhere((s) => s.id == p['id'], orElse: () => Student(id: '', nis: '', nisn: '', name: '', gender: '', kelas: '', position: ''))
+            : null;
+        final teacherMatch = role == UserRole.guru 
+            ? _teachers.firstWhere((t) => t.id == p['id'], orElse: () => Teacher(id: '', nip: '', name: '', position: '', avatar: '', subjects: []))
+            : null;
+
+        loadedAccounts.add(UserProfile(
+          id: p['id'] as String,
+          name: p['name'] as String,
+          username: p['username'] as String? ?? '',
+          password: role == UserRole.admin ? 'password' : (role == UserRole.guru ? 'guru123' : 'siswa123'),
+          role: role,
+          avatar: p['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${p['id']}',
+          kelas: studentMatch?.kelas,
+          nipNis: role == UserRole.siswa ? studentMatch?.nis : (role == UserRole.guru ? teacherMatch?.nip : null),
+          position: studentMatch?.position,
+        ));
+      }
+      _accounts = loadedAccounts;
+
+      // Fallback: Make sure there's at least one admin account
+      if (!_accounts.any((a) => a.role == UserRole.admin)) {
+        _accounts.add(MockData.users['admin']!);
+      }
+
+      // 7. Fetch Attendance
+      try {
+        final dbAttendance = await supabase.from('attendance').select('*, subjects(name)');
+        _attendance = dbAttendance.map<Attendance>((a) {
+          final subject = a['subjects'] as Map?;
+          
+          final statusStr = a['status'] as String? ?? 'hadir';
+          final status = AttendanceStatus.values.firstWhere(
+            (s) => s.name == statusStr,
+            orElse: () => AttendanceStatus.hadir,
+          );
+
+          final markedBy = a['marked_by'] as String? ?? '';
+          String markedByName = 'System';
+          if (markedBy.isNotEmpty) {
+            final accs = _accounts.where((acc) => acc.id == markedBy || acc.nipNis == markedBy).toList();
+            if (accs.isNotEmpty) {
+              markedByName = accs.first.name;
+            } else {
+              final tchs = _teachers.where((t) => t.id == markedBy || t.nip == markedBy).toList();
+              if (tchs.isNotEmpty) {
+                markedByName = tchs.first.name;
+              } else {
+                final stds = _students.where((s) => s.id == markedBy || s.nis == markedBy).toList();
+                if (stds.isNotEmpty) {
+                  markedByName = stds.first.name;
+                }
+              }
+            }
+          }
+
+          return Attendance(
+            id: a['id'] as String,
+            studentId: a['student_id'] as String,
+            classId: a['class_id'] as String,
+            subjectId: subject?['name'] as String? ?? '',
+            date: DateTime.parse(a['date'] as String).toLocal(),
+            status: status,
+            markedBy: markedBy,
+            markedByRole: a['marked_by_role'] as String? ?? 'admin',
+            markedByName: markedByName,
+            reason: a['reason'] as String?,
+            notes: a['notes'] as String?,
+          );
+        }).toList();
+      } catch (e) {
+        debugPrint("Error fetching attendance: $e");
+        _attendance = [];
+      }
+
+    } catch (e) {
+      debugPrint("Error fetching Supabase data: $e");
+    } finally {
+      _isFetching = false;
+      notifyListeners();
+    }
+  }
   
   List<ResetRequest> get resetRequests => _resetRequests.where((r) => !r.isProcessed).toList();
 
@@ -655,7 +935,7 @@ class AppProvider with ChangeNotifier {
 
   List<TimeSlot> getTimeSlots(String day) => timeSlotsByDay[day] ?? timeSlotsByDay['Senin']!;
 
-  bool login(String username, String password) {
+  bool login(String username, String password, UserRole requiredRole) {
     final cleanUsername = username.trim().toLowerCase();
     final cleanPassword = password.trim();
     
@@ -664,6 +944,8 @@ class AppProvider with ChangeNotifier {
         (u) => u.username.toLowerCase() == cleanUsername && u.password == cleanPassword,
       );
       
+      if (account.role != requiredRole) return false;
+
       _currentUser = account;
       _isLoggedIn = true;
       _activeMenu = 'dashboard';
@@ -686,60 +968,141 @@ class AppProvider with ChangeNotifier {
 
 
   // Account Management Logic
-  void generateTeacherAccounts() {
-    for (var teacher in _teachers) {
-      final exists = _accounts.any((a) => a.nipNis == teacher.nip);
-      if (!exists) {
-        final username = teacher.name.split(' ')[0].toLowerCase() + teacher.nip.substring(teacher.nip.length - 4);
-        _accounts.add(UserProfile(
-          id: DateTime.now().toString() + teacher.id,
-          name: teacher.name,
-          username: username,
-          password: 'guru123',
-          role: UserRole.guru,
-          avatar: teacher.avatar,
-          subject: teacher.subjects.isNotEmpty ? teacher.subjects[0] : null,
-          nipNis: teacher.nip,
-        ));
+  Future<void> generateTeacherAccounts() async {
+    try {
+      final supabase = Supabase.instance.client;
+      for (var teacher in _teachers) {
+        final index = _accounts.indexWhere((a) => a.id == teacher.id || a.nipNis == teacher.nip);
+        final username = teacher.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + teacher.nip.substring(teacher.nip.length - 4);
+        
+        await supabase.from('profiles').upsert({
+          'id': teacher.id,
+          'name': teacher.name,
+          'role': 'guru',
+          'username': username,
+          'avatar_url': teacher.avatar,
+        });
+
+        if (index != -1) {
+          _accounts[index] = UserProfile(
+            id: teacher.id,
+            name: teacher.name,
+            username: username,
+            password: _accounts[index].password,
+            role: UserRole.guru,
+            avatar: teacher.avatar,
+            subject: teacher.subjects.isNotEmpty ? teacher.subjects[0] : null,
+            nipNis: teacher.nip,
+          );
+        } else {
+          _accounts.add(UserProfile(
+            id: teacher.id,
+            name: teacher.name,
+            username: username,
+            password: 'guru123',
+            role: UserRole.guru,
+            avatar: teacher.avatar,
+            subject: teacher.subjects.isNotEmpty ? teacher.subjects[0] : null,
+            nipNis: teacher.nip,
+          ));
+        }
       }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error generating teacher accounts: $e");
     }
-    notifyListeners();
   }
 
-  void generateStudentAccounts() {
-    final secretaries = _students.where((s) => s.position.contains('Sekretaris'));
-    for (var student in secretaries) {
-      final exists = _accounts.any((a) => a.nipNis == student.nis);
-      if (!exists) {
-        final username = student.name.split(' ')[0].toLowerCase() + student.nis.substring(student.nis.length - 2);
-        _accounts.add(UserProfile(
-          id: DateTime.now().toString() + student.id,
-          name: student.name,
-          username: username,
-          password: 'siswa123',
-          role: UserRole.siswa,
-          avatar: 'https://i.pravatar.cc/150?u=${student.id}',
-          kelas: student.kelas,
-          nipNis: student.nis,
-          position: student.position,
-        ));
+  Future<void> generateStudentAccounts() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final secretaries = _students.where((s) => s.position.contains('Sekretaris'));
+      for (var student in secretaries) {
+        final index = _accounts.indexWhere((a) => a.id == student.id || a.nipNis == student.nis);
+        final username = student.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + student.nis.substring(student.nis.length - 2);
+        
+        await supabase.from('profiles').upsert({
+          'id': student.id,
+          'name': student.name,
+          'role': 'siswa',
+          'username': username,
+        });
+
+        if (index != -1) {
+          _accounts[index] = UserProfile(
+            id: student.id,
+            name: student.name,
+            username: username,
+            password: _accounts[index].password,
+            role: UserRole.siswa,
+            avatar: 'https://i.pravatar.cc/150?u=${student.id}',
+            kelas: student.kelas,
+            nipNis: student.nis,
+            position: student.position,
+          );
+        } else {
+          _accounts.add(UserProfile(
+            id: student.id,
+            name: student.name,
+            username: username,
+            password: 'siswa123',
+            role: UserRole.siswa,
+            avatar: 'https://i.pravatar.cc/150?u=${student.id}',
+            kelas: student.kelas,
+            nipNis: student.nis,
+            position: student.position,
+          ));
+        }
       }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error generating student accounts: $e");
     }
-    notifyListeners();
   }
 
-  void deleteAccount(String id) {
-    _accounts.removeWhere((a) => a.id == id);
-    notifyListeners();
+  Future<void> deleteAccount(String id) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('profiles').delete().eq('id', id);
+      _accounts.removeWhere((a) => a.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error deleting account: $e");
+    }
   }
 
   // Student CRUD
-  void addStudent(Student student) {
+  Future<void> addStudent(Student student) async {
     if (isDuplicateNis(student.nis)) return;
     if (student.nisn.isNotEmpty && isDuplicateNisn(student.nisn)) return;
-    _students.insert(0, student);
-    _syncClassStudentCount(student.kelas);
-    notifyListeners();
+
+    try {
+      final supabase = Supabase.instance.client;
+      final cleanUsername = student.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + (student.nis.length >= 2 ? student.nis.substring(student.nis.length - 2) : '12');
+      await supabase.from('profiles').upsert({
+        'id': student.id,
+        'name': student.name,
+        'role': 'siswa',
+        'username': cleanUsername,
+      });
+
+      final cls = findClassByIdOrName(student.kelas);
+
+      await supabase.from('students').upsert({
+        'id': student.id,
+        'nis': student.nis,
+        'nisn': student.nisn,
+        'gender': student.gender,
+        'class_id': cls?.id,
+        'position': student.position,
+      });
+
+      _students.insert(0, student);
+      _syncClassStudentCount(student.kelas);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error adding student: $e");
+    }
   }
 
   void _syncClassStudentCount(String kelasName) {
@@ -759,64 +1122,227 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  void updateStudent(Student student) {
-    final index = _students.indexWhere((s) => s.id == student.id);
-    if (index != -1) {
-      _students[index] = student;
-      notifyListeners();
+  Future<void> updateStudent(Student student) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final cleanUsername = student.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + (student.nis.length >= 2 ? student.nis.substring(student.nis.length - 2) : '12');
+      await supabase.from('profiles').upsert({
+        'id': student.id,
+        'name': student.name,
+        'role': 'siswa',
+        'username': cleanUsername,
+      });
+
+      final cls = findClassByIdOrName(student.kelas);
+
+      await supabase.from('students').upsert({
+        'id': student.id,
+        'nis': student.nis,
+        'nisn': student.nisn,
+        'gender': student.gender,
+        'class_id': cls?.id,
+        'position': student.position,
+      });
+
+      final index = _students.indexWhere((s) => s.id == student.id);
+      if (index != -1) {
+        _students[index] = student;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error updating student: $e");
     }
   }
 
-  void deleteStudent(String id) {
-    _students.removeWhere((s) => s.id == id);
-    notifyListeners();
+  Future<void> assignClassRole(String? studentId, String role, String className) async {
+    try {
+      // 1. Clear whoever has this role in this class currently
+      final oldHolders = _students.where((s) => s.kelas == className && s.position == role).toList();
+      for (final s in oldHolders) {
+        final resetStudent = Student(
+          id: s.id,
+          nis: s.nis,
+          nisn: s.nisn,
+          name: s.name,
+          gender: s.gender,
+          kelas: s.kelas,
+          position: 'Anggota',
+        );
+        await updateStudent(resetStudent);
+      }
+
+      // 2. If a studentId is provided, assign the new role to that student
+      if (studentId != null && studentId.isNotEmpty) {
+        final s = _students.firstWhere((st) => st.id == studentId);
+        final updatedStudent = Student(
+          id: s.id,
+          nis: s.nis,
+          nisn: s.nisn,
+          name: s.name,
+          gender: s.gender,
+          kelas: s.kelas,
+          position: role,
+        );
+        await updateStudent(updatedStudent);
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error assigning class role: $e");
+    }
+  }
+
+  Future<void> deleteStudent(String id) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('students').delete().eq('id', id);
+      await supabase.from('profiles').delete().eq('id', id);
+
+      _students.removeWhere((s) => s.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error deleting student: $e");
+    }
+  }
+
+  Future<void> clearAllStudents() async {
+    try {
+      final supabase = Supabase.instance.client;
+      
+      // Delete all attendance records first to avoid foreign key violations
+      await supabase.from('attendance').delete().neq('id', 'dummy-id-to-delete-all');
+      
+      // Delete all records in students
+      await supabase.from('students').delete().neq('id', 'dummy-id-to-delete-all');
+      
+      // Delete all profiles with role = 'siswa'
+      await supabase.from('profiles').delete().eq('role', 'siswa');
+      
+      // Clear local states
+      _students.clear();
+      _attendance.clear();
+      _accounts.removeWhere((a) => a.role == UserRole.siswa);
+      
+      // Recompute totalStudents for all classes
+      for (var i = 0; i < _classes.length; i++) {
+        _classes[i] = SchoolClass(
+          id: _classes[i].id,
+          name: _classes[i].name,
+          homeroomTeacherId: _classes[i].homeroomTeacherId,
+          homeroomTeacherName: _classes[i].homeroomTeacherName,
+          roomName: _classes[i].roomName,
+          totalStudents: 0,
+        );
+      }
+      
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error clearing all students: $e");
+    }
   }
 
   // Class CRUD
-  void addClass(SchoolClass cls) {
+  Future<void> addClass(SchoolClass cls) async {
     if (isDuplicateClassName(cls.name)) return;
-    _classes.add(cls);
     
-    // Automatically generate default events for the new class
-    final defaultEvents = [
-      {'day': 'Senin', 'slot': 'Jam 1', 'title': 'Upacara/Perwalian'},
-      {'day': 'Senin', 'slot': 'Istirahat', 'title': 'Istirahat'},
-      {'day': 'Selasa', 'slot': 'Pembiasaan', 'title': 'TADARUS & SARAPAN'},
-      {'day': 'Selasa', 'slot': 'Istirahat', 'title': 'Istirahat'},
-      {'day': 'Rabu', 'slot': 'Jam 1', 'title': 'Sholat Dhuha & Tadarus'},
-      {'day': 'Rabu', 'slot': 'Istirahat', 'title': 'Istirahat'},
-      {'day': 'Kamis', 'slot': 'Pembiasaan', 'title': 'TADARUS & LITERASI'},
-      {'day': 'Kamis', 'slot': 'Istirahat', 'title': 'Istirahat'},
-      {'day': 'Jumat', 'slot': 'Jam 1', 'title': 'Senam & Jumat Bersih'},
-      {'day': 'Jumat', 'slot': 'Istirahat', 'title': 'Istirahat'},
-    ];
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('classes').upsert({
+        'id': cls.id,
+        'name': cls.name,
+        'room_name': cls.roomName,
+        'homeroom_teacher_id': cls.homeroomTeacherId.isEmpty ? null : cls.homeroomTeacherId,
+      });
 
-    for (var ev in defaultEvents) {
-      _schedules.add(ScheduleEntry(
-        id: 'auto_${cls.id}_${ev['day']}_${ev['slot']}',
-        day: ev['day']!,
-        slotLabel: ev['slot']!,
-        classId: cls.id,
-        isEvent: true,
-        customTitle: ev['title'],
-      ));
-    }
-    
-    notifyListeners();
-  }
+      _classes.add(cls);
+      
+      // Automatically generate default events for the new class
+      final defaultEvents = [
+        {'day': 'Senin', 'slot': 'Jam 1', 'title': 'Upacara/Perwalian'},
+        {'day': 'Senin', 'slot': 'Istirahat', 'title': 'Istirahat'},
+        {'day': 'Selasa', 'slot': 'Pembiasaan', 'title': 'TADARUS & SARAPAN'},
+        {'day': 'Selasa', 'slot': 'Istirahat', 'title': 'Istirahat'},
+        {'day': 'Rabu', 'slot': 'Jam 1', 'title': 'Sholat Dhuha & Tadarus'},
+        {'day': 'Rabu', 'slot': 'Istirahat', 'title': 'Istirahat'},
+        {'day': 'Kamis', 'slot': 'Pembiasaan', 'title': 'TADARUS & LITERASI'},
+        {'day': 'Kamis', 'slot': 'Istirahat', 'title': 'Istirahat'},
+        {'day': 'Jumat', 'slot': 'Jam 1', 'title': 'Senam & Jumat Bersih'},
+        {'day': 'Jumat', 'slot': 'Istirahat', 'title': 'Istirahat'},
+      ];
 
-  void updateClass(SchoolClass cls) {
-    final index = _classes.indexWhere((c) => c.id == cls.id);
-    if (index != -1) {
-      _classes[index] = cls;
+      for (var ev in defaultEvents) {
+        final scheduleId = 'auto_${cls.id}_${ev['day']}_${ev['slot']}';
+        final entry = ScheduleEntry(
+          id: scheduleId,
+          day: ev['day']!,
+          slotLabel: ev['slot']!,
+          classId: cls.id,
+          isEvent: true,
+          customTitle: ev['title'],
+        );
+
+        await supabase.from('schedules').upsert({
+          'id': _generateUuidFromText(scheduleId),
+          'class_id': cls.id,
+          'day_name': ev['day'],
+          'slot_label': ev['slot'],
+          'is_event': true,
+          'custom_title': ev['title'],
+        });
+
+        _schedules.add(entry);
+      }
+      
       notifyListeners();
+    } catch (e) {
+      debugPrint("Error adding class: $e");
     }
   }
 
-  void deleteClass(String id) {
-    _classes.removeWhere((c) => c.id == id);
-    _schedules.removeWhere((s) => s.classId == id); // Also cleanup schedules
-    notifyListeners();
+  static String _generateUuidFromText(String text) {
+    final hash = text.hashCode.abs().toString().padRight(12, '0');
+    final section1 = hash.substring(0, 8);
+    final section2 = hash.substring(8, 12);
+    return "$section1-1234-4321-a1b2-${section2}abcdef00";
+  }
+
+  static String generateNewUuid() {
+    final rand = "${DateTime.now().microsecondsSinceEpoch}_${DateTime.now().hashCode}";
+    return _generateUuidFromText(rand);
+  }
+
+  Future<void> updateClass(SchoolClass cls) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('classes').upsert({
+        'id': cls.id,
+        'name': cls.name,
+        'room_name': cls.roomName,
+        'homeroom_teacher_id': cls.homeroomTeacherId.isEmpty ? null : cls.homeroomTeacherId,
+      });
+
+      final index = _classes.indexWhere((c) => c.id == cls.id);
+      if (index != -1) {
+        _classes[index] = cls;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error updating class: $e");
+    }
+  }
+
+  Future<void> deleteClass(String id) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('schedules').delete().eq('class_id', id);
+      await supabase.from('classes').delete().eq('id', id);
+
+      _classes.removeWhere((c) => c.id == id);
+      _schedules.removeWhere((s) => s.classId == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error deleting class: $e");
+    }
   }
 
   void setActiveMenu(String menu) {
@@ -830,23 +1356,52 @@ class AppProvider with ChangeNotifier {
   }
 
   // Subject CRUD
-  void addSubject(Subject subject) {
+  Future<void> addSubject(Subject subject) async {
     if (isDuplicateSubjectName(subject.name)) return;
-    _subjects.insert(0, subject);
-    notifyListeners();
-  }
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('subjects').upsert({
+        'id': subject.id,
+        'name': subject.name,
+      });
 
-  void updateSubject(Subject subject) {
-    final index = _subjects.indexWhere((s) => s.id == subject.id);
-    if (index != -1) {
-      _subjects[index] = subject;
+      _subjects.insert(0, subject);
       notifyListeners();
+    } catch (e) {
+      debugPrint("Error adding subject: $e");
     }
   }
 
-  void deleteSubject(String id) {
-    _subjects.removeWhere((s) => s.id == id);
-    notifyListeners();
+  Future<void> updateSubject(Subject subject) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('subjects').upsert({
+        'id': subject.id,
+        'name': subject.name,
+      });
+
+      final index = _subjects.indexWhere((s) => s.id == subject.id);
+      if (index != -1) {
+        _subjects[index] = subject;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error updating subject: $e");
+    }
+  }
+
+  Future<void> deleteSubject(String id) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('teacher_subjects').delete().eq('subject_id', id);
+      await supabase.from('schedules').delete().eq('subject_id', id);
+      await supabase.from('subjects').delete().eq('id', id);
+
+      _subjects.removeWhere((s) => s.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error deleting subject: $e");
+    }
   }
 
   // Room CRUD
@@ -870,23 +1425,93 @@ class AppProvider with ChangeNotifier {
   }
 
   // Teacher CRUD
-  void addTeacher(Teacher teacher) {
+  Future<void> addTeacher(Teacher teacher) async {
     if (isDuplicateTeacherNip(teacher.nip)) return;
-    _teachers.insert(0, teacher);
-    notifyListeners();
-  }
+    try {
+      final supabase = Supabase.instance.client;
+      final cleanUsername = teacher.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + (teacher.nip.length >= 4 ? teacher.nip.substring(teacher.nip.length - 4) : '1234');
+      await supabase.from('profiles').upsert({
+        'id': teacher.id,
+        'name': teacher.name,
+        'role': 'guru',
+        'username': cleanUsername,
+        'avatar_url': teacher.avatar,
+      });
 
-  void updateTeacher(Teacher teacher) {
-    final index = _teachers.indexWhere((t) => t.id == teacher.id);
-    if (index != -1) {
-      _teachers[index] = teacher;
+      await supabase.from('teachers').upsert({
+        'id': teacher.id,
+        'nip': teacher.nip,
+      });
+
+      await supabase.from('teacher_subjects').delete().eq('teacher_id', teacher.id);
+      for (final subName in teacher.subjects) {
+        final sub = findSubjectByIdOrName(subName);
+        if (sub != null) {
+          await supabase.from('teacher_subjects').insert({
+            'teacher_id': teacher.id,
+            'subject_id': sub.id,
+          });
+        }
+      }
+
+      _teachers.insert(0, teacher);
       notifyListeners();
+    } catch (e) {
+      debugPrint("Error adding teacher: $e");
     }
   }
 
-  void deleteTeacher(String id) {
-    _teachers.removeWhere((t) => t.id == id);
-    notifyListeners();
+  Future<void> updateTeacher(Teacher teacher) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final cleanUsername = teacher.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + (teacher.nip.length >= 4 ? teacher.nip.substring(teacher.nip.length - 4) : '1234');
+      await supabase.from('profiles').upsert({
+        'id': teacher.id,
+        'name': teacher.name,
+        'role': 'guru',
+        'username': cleanUsername,
+        'avatar_url': teacher.avatar,
+      });
+
+      await supabase.from('teachers').upsert({
+        'id': teacher.id,
+        'nip': teacher.nip,
+      });
+
+      await supabase.from('teacher_subjects').delete().eq('teacher_id', teacher.id);
+      for (final subName in teacher.subjects) {
+        final sub = findSubjectByIdOrName(subName);
+        if (sub != null) {
+          await supabase.from('teacher_subjects').insert({
+            'teacher_id': teacher.id,
+            'subject_id': sub.id,
+          });
+        }
+      }
+
+      final index = _teachers.indexWhere((t) => t.id == teacher.id);
+      if (index != -1) {
+        _teachers[index] = teacher;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error updating teacher: $e");
+    }
+  }
+
+  Future<void> deleteTeacher(String id) async {
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('teacher_subjects').delete().eq('teacher_id', id);
+      await supabase.from('schedules').delete().eq('teacher_id', id);
+      await supabase.from('teachers').delete().eq('id', id);
+      await supabase.from('profiles').delete().eq('id', id);
+
+      _teachers.removeWhere((t) => t.id == id);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error deleting teacher: $e");
+    }
   }
 
   ScheduleEntry? _activeScheduleForSession;
@@ -934,14 +1559,14 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void saveAttendanceBatch({
+  Future<void> saveAttendanceBatch({
     required SchoolClass cls,
     required Subject sub,
     required Map<String, AttendanceStatus> statuses,
     required UserProfile user,
     String? reason,
     List<ScheduleEntry>? scheduleEntries,
-  }) {
+  }) async {
     if (user.role == UserRole.guru &&
         !canGuruMarkAttendance(cls.id, sub.name)) {
       return;
@@ -952,22 +1577,70 @@ class AppProvider with ChangeNotifier {
       return;
     }
 
-    final now = DateTime.now();
+    final now = systemNow();
     final role = user.role == UserRole.siswa ? 'siswa' : user.role.name;
 
-    for (final entry in statuses.entries) {
-      addAttendance(Attendance(
-        id: 'at_${now.millisecondsSinceEpoch}_${entry.key}',
-        studentId: entry.key,
-        classId: cls.id,
-        subjectId: sub.name,
-        date: now,
-        status: entry.value,
-        markedBy: user.id,
-        markedByRole: role,
-        markedByName: user.name,
-        reason: reason,
-      ));
+    try {
+      final supabase = Supabase.instance.client;
+      final todayStart = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toUtc().toIso8601String();
+
+      final List<Map<String, dynamic>> attendanceInserts = [];
+      final List<Attendance> localRecords = [];
+
+      for (final entry in statuses.entries) {
+        final studentId = entry.key;
+
+        await supabase
+            .from('attendance')
+            .delete()
+            .eq('student_id', studentId)
+            .eq('subject_id', sub.id)
+            .gte('date', todayStart)
+            .lte('date', todayEnd);
+
+        _attendance.removeWhere((a) =>
+            a.studentId == studentId &&
+            a.subjectId == sub.name &&
+            isSameCalendarDay(a.date, now));
+
+        final attendanceId = 'at_${now.millisecondsSinceEpoch}_$studentId';
+        final dbStatus = entry.value.name == 'pulang' ? 'hadir' : entry.value.name;
+
+        attendanceInserts.add({
+          'id': _generateUuidFromText(attendanceId),
+          'student_id': studentId,
+          'class_id': cls.id,
+          'subject_id': sub.id,
+          'date': now.toUtc().toIso8601String(),
+          'status': dbStatus,
+          'marked_by': user.id,
+          'marked_by_role': role,
+          'reason': reason,
+        });
+
+        localRecords.add(Attendance(
+          id: _generateUuidFromText(attendanceId),
+          studentId: studentId,
+          classId: cls.id,
+          subjectId: sub.name,
+          date: now,
+          status: entry.value,
+          markedBy: user.id,
+          markedByRole: role,
+          markedByName: user.name,
+          reason: reason,
+        ));
+      }
+
+      if (attendanceInserts.isNotEmpty) {
+        await supabase.from('attendance').insert(attendanceInserts);
+      }
+
+      _attendance.addAll(localRecords);
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error saving attendance batch: $e");
     }
   }
 
@@ -996,7 +1669,7 @@ class AppProvider with ChangeNotifier {
   }
 
   Map<String, int> getStudentMonthlyTotals(String studentId, {DateTime? month}) {
-    final ref = month ?? DateTime.now();
+    final ref = month ?? systemNow();
     final records = _attendance.where((a) =>
         a.studentId == studentId &&
         a.date.month == ref.month &&
@@ -1010,7 +1683,7 @@ class AppProvider with ChangeNotifier {
   }
 
   List<Attendance> getAdminAttendanceReport({DateTime? date, int? lastMonths}) {
-    final now = DateTime.now();
+    final now = systemNow();
     return _attendance.where((a) {
       if (date != null) {
         return isSameCalendarDay(a.date, date);
