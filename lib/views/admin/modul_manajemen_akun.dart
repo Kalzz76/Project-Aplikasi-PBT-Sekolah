@@ -244,10 +244,14 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
                     child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 );
-                await provider.generateTeacherAccounts();
+                final count = await provider.generateTeacherAccounts();
                 if (context.mounted) {
                   Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Guru berhasil di-generate!'), backgroundColor: Colors.green));
+                  if (count > 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count Akun Guru baru berhasil di-generate!'), backgroundColor: Colors.green));
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada akun guru baru yang perlu di-generate.'), backgroundColor: Colors.orange));
+                  }
                 }
               },
               child: const Text('Generate Akun Guru'),
@@ -263,10 +267,22 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
                     child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 );
-                await provider.generateStudentAccounts();
+                final count = await provider.generateStudentAccounts();
                 if (context.mounted) {
                   Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Siswa Sekretaris berhasil di-generate!'), backgroundColor: Colors.green));
+                  if (count == -1) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Gagal: Belum ada siswa yang ditunjuk sebagai Sekretaris (Sekretaris 1 atau Sekretaris 2) di kelas mana pun!'),
+                        backgroundColor: Colors.redAccent,
+                        duration: Duration(seconds: 5),
+                      ),
+                    );
+                  } else if (count > 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count Akun Siswa Sekretaris baru berhasil di-generate!'), backgroundColor: Colors.green));
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak ada akun sekretaris baru yang perlu di-generate.'), backgroundColor: Colors.orange));
+                  }
                 }
               },
               child: const Text('Generate Akun Siswa'),

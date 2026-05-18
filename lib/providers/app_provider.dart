@@ -968,7 +968,8 @@ class AppProvider with ChangeNotifier {
 
 
   // Account Management Logic
-  Future<void> generateTeacherAccounts() async {
+  Future<int> generateTeacherAccounts() async {
+    int count = 0;
     try {
       final supabase = Supabase.instance.client;
       for (var teacher in _teachers) {
@@ -1005,18 +1006,24 @@ class AppProvider with ChangeNotifier {
             subject: teacher.subjects.isNotEmpty ? teacher.subjects[0] : null,
             nipNis: teacher.nip,
           ));
+          count++;
         }
       }
       notifyListeners();
+      return count;
     } catch (e) {
       debugPrint("Error generating teacher accounts: $e");
+      return 0;
     }
   }
 
-  Future<void> generateStudentAccounts() async {
+  Future<int> generateStudentAccounts() async {
+    int count = 0;
     try {
       final supabase = Supabase.instance.client;
-      final secretaries = _students.where((s) => s.position.contains('Sekretaris'));
+      final secretaries = _students.where((s) => s.position.contains('Sekretaris')).toList();
+      if (secretaries.isEmpty) return -1; // Indication that no secretaries exist
+      
       for (var student in secretaries) {
         final index = _accounts.indexWhere((a) => a.id == student.id || a.nipNis == student.nis);
         final username = student.name.split(' ')[0].toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '') + student.nis.substring(student.nis.length - 2);
@@ -1052,11 +1059,14 @@ class AppProvider with ChangeNotifier {
             nipNis: student.nis,
             position: student.position,
           ));
+          count++;
         }
       }
       notifyListeners();
+      return count;
     } catch (e) {
       debugPrint("Error generating student accounts: $e");
+      return 0;
     }
   }
 
