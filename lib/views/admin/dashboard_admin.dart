@@ -25,13 +25,53 @@ class DashboardAdmin extends StatelessWidget {
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
+              
+              final progressNotifier = ValueNotifier<double>(0.0);
+              final messageNotifier = ValueNotifier<String>("Memulai...");
+
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (context) => const Center(child: CircularProgressIndicator()),
+                builder: (context) {
+                  return AlertDialog(
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 20),
+                        ValueListenableBuilder<String>(
+                          valueListenable: messageNotifier,
+                          builder: (context, message, child) {
+                            return Text(message, style: const TextStyle(fontWeight: FontWeight.bold), textAlign: TextAlign.center);
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        ValueListenableBuilder<double>(
+                          valueListenable: progressNotifier,
+                          builder: (context, progress, child) {
+                            return Column(
+                              children: [
+                                LinearProgressIndicator(value: progress, backgroundColor: Colors.grey[200]),
+                                const SizedBox(height: 10),
+                                Text('${(progress * 100).toInt()}%', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                              ]
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
               );
+
               try {
-                await SupabaseSyncService.syncAllData(provider);
+                await SupabaseSyncService.syncAllData(
+                  provider,
+                  onProgress: (msg, prog) {
+                    messageNotifier.value = msg;
+                    progressNotifier.value = prog;
+                  }
+                );
                 if (context.mounted) {
                   Navigator.pop(context); // Close loading
                   ScaffoldMessenger.of(context).showSnackBar(

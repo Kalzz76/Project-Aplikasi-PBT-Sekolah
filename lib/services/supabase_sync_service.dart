@@ -6,11 +6,13 @@ class SupabaseSyncService {
   static final SupabaseClient _supabase = Supabase.instance.client;
 
   /// Sinkronisasi data lokal (Mata Pelajaran, Guru, Ruangan, Kelas, Jadwal, Siswa) ke Supabase
-  static Future<void> syncAllData(AppProvider provider) async {
+  static Future<void> syncAllData(AppProvider provider, {Function(String message, double progress)? onProgress}) async {
     try {
+      onProgress?.call("Memulai sinkronisasi data...", 0.0);
       debugPrint("Memulai sinkronisasi data...");
 
       // 1. Sinkronisasi Mata Pelajaran (Subjects)
+      onProgress?.call("Sinkronisasi Mata Pelajaran...", 0.1);
       debugPrint("Sinkronisasi Mata Pelajaran...");
       for (final subject in provider.subjects) {
         await _supabase.from('subjects').upsert({
@@ -18,41 +20,33 @@ class SupabaseSyncService {
         }, onConflict: 'name');
       }
 
-      // Ambil data mapel dari Supabase untuk mencocokkan ID
       final dbSubjects = await _supabase.from('subjects').select();
       final mapelIdMap = {for (var s in dbSubjects) s['name'] as String: s['id'] as String};
 
       // 2. Sinkronisasi Profil & Guru (Teachers)
+      onProgress?.call("Sinkronisasi Data Guru...", 0.3);
       debugPrint("Sinkronisasi Data Guru...");
       for (final teacher in provider.teachers) {
-        // Karena profiles.id mereferensikan auth.users(id), untuk testing
-        // kita buat dummy profile di public.profiles terlebih dahulu.
-        // Jika terdapat kendala constraint FK auth.users, kita bisa me-relax constraint tersebut.
-        // Di sini kita coba upsert profile & teacher.
-        
-        // Kita gunakan ID guru yang ada (pastikan berformat UUID jika RLS / FK aktif,
-        // jika tidak berformat UUID, kita generate UUID baru atau bypass)
         String teacherId = teacher.id;
         if (teacherId.length < 36) {
-          // Jika ID mock bukan UUID, kita buat UUID dummy konsisten dari nama/NIP
           teacherId = _generateUuidFromText(teacher.nip);
         }
 
-        // Upsert profile
+        final existingAccount = provider.accounts.where((a) => a.nipNis == teacher.nip).toList();
+        final usernameToSave = existingAccount.isNotEmpty ? existingAccount.first.username : teacher.nip;
+
         await _supabase.from('profiles').upsert({
           'id': teacherId,
           'name': teacher.name,
           'role': 'guru',
-          'username': teacher.nip,
+          'username': usernameToSave,
         });
 
-        // Upsert teacher
         await _supabase.from('teachers').upsert({
           'id': teacherId,
           'nip': teacher.nip,
         });
 
-        // Hubungkan guru dengan mata pelajaran (teacher_subjects)
         for (final subName in teacher.subjects) {
           final subId = mapelIdMap[subName];
           if (subId != null) {
@@ -64,7 +58,6 @@ class SupabaseSyncService {
         }
       }
 
-      // Ambil data guru dari Supabase untuk pencocokan kelas
       final dbTeachers = await _supabase.from('teachers').select('*, profiles(name)');
       final teacherIdMap = {
         for (var t in dbTeachers) 
@@ -72,6 +65,7 @@ class SupabaseSyncService {
       };
 
       // 3. Sinkronisasi Kelas (Classes)
+      onProgress?.call("Sinkronisasi Data Kelas...", 0.5);
       debugPrint("Sinkronisasi Data Kelas...");
       for (final cls in provider.classes) {
         String classId = cls.id;
@@ -89,11 +83,11 @@ class SupabaseSyncService {
         });
       }
 
-      // Ambil data kelas dari Supabase untuk pencocokan siswa & jadwal
       final dbClasses = await _supabase.from('classes').select();
       final classIdMap = {for (var c in dbClasses) c['name'] as String: c['id'] as String};
 
       // 4. Sinkronisasi Siswa (Students)
+      onProgress?.call("Sinkronisasi Data Siswa...", 0.7);
       debugPrint("Sinkronisasi Data Siswa...");
       for (final student in provider.students) {
         String studentId = student.id;
@@ -103,15 +97,16 @@ class SupabaseSyncService {
 
         final classId = classIdMap[student.kelas];
 
-        // Upsert profile
+        final existingAccount = provider.accounts.where((a) => a.nipNis == student.nis).toList();
+        final usernameToSave = existingAccount.isNotEmpty ? existingAccount.first.username : student.nis;
+
         await _supabase.from('profiles').upsert({
           'id': studentId,
           'name': student.name,
           'role': 'siswa',
-          'username': student.nis,
+          'username': usernameToSave,
         });
 
-        // Upsert student
         await _supabase.from('students').upsert({
           'id': studentId,
           'nis': student.nis,
@@ -123,17 +118,18 @@ class SupabaseSyncService {
       }
 
       // 5. Sinkronisasi Jadwal (Schedules)
+      onProgress?.call("Sinkronisasi Jadwal Pelajaran...", 0.9);
       debugPrint("Sinkronisasi Jadwal Pelajaran...");
       for (final schedule in provider.schedules) {
         final classId = classIdMap[schedule.classId];
-        final subjectId = mapelIdMap[schedule.subjectId]; // scheduler.subjectId stores subject name or id
-        final teacherId = teacherIdMap[schedule.teacherId]; // scheduler.teacherId stores teacher name or id
+        final subjectId = mapelIdMap[schedule.subjectId];
+        final teacherId = teacherIdMap[schedule.teacherId];
 
         await _supabase.from('schedules').upsert({
           'class_id': classId,
           'subject_id': subjectId,
           'teacher_id': teacherId,
-          'room_name': schedule.roomId, // stores room name/id
+          'room_name': schedule.roomId, 
           'day_name': schedule.day,
           'slot_label': schedule.slotLabel,
           'is_event': schedule.isEvent,
@@ -141,8 +137,10 @@ class SupabaseSyncService {
         });
       }
 
+      onProgress?.call("Sinkronisasi Berhasil!", 1.0);
       debugPrint("Sinkronisasi Berhasil!");
     } catch (e) {
+      onProgress?.call("Sinkronisasi Gagal: $e", 0.0);
       debugPrint("Kesalahan saat sinkronisasi: $e");
       rethrow;
     }
