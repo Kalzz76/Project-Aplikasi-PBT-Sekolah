@@ -1707,13 +1707,35 @@ class AppProvider with ChangeNotifier {
       ..sort((a, b) => b.date.compareTo(a.date));
   }
 
-  void addScheduleEntry(ScheduleEntry entry) {
+  Future<void> addScheduleEntry(ScheduleEntry entry) async {
     _schedules.add(entry);
     notifyListeners();
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('schedules').upsert({
+        'id': _generateUuidFromText(entry.id),
+        'class_id': entry.classId,
+        'day_name': entry.day,
+        'slot_label': entry.slotLabel,
+        'is_event': entry.isEvent,
+        'custom_title': entry.customTitle,
+        'subject_id': entry.subjectId,
+        'room_id': entry.roomId,
+        'teacher_id': entry.teacherId,
+      });
+    } catch (e) {
+      debugPrint("Error saving schedule entry: $e");
+    }
   }
 
-  void deleteScheduleEntry(String id) {
+  Future<void> deleteScheduleEntry(String id) async {
     _schedules.removeWhere((s) => s.id == id);
     notifyListeners();
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase.from('schedules').delete().eq('id', _generateUuidFromText(id));
+    } catch (e) {
+      debugPrint("Error deleting schedule entry: $e");
+    }
   }
 }
