@@ -431,16 +431,23 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
         dataRowHeight: 72,
         headingRowColor: MaterialStateProperty.all(isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC)),
         columns: [
+          DataColumn(label: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           DataColumn(label: Text('PENGGUNA', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           DataColumn(label: Text('USERNAME', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           DataColumn(label: Text('PASSWORD', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           DataColumn(label: Text('ROLE', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           DataColumn(label: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
         ],
-        rows: accounts.map((account) {
+        rows: accounts.asMap().entries.map((entry) {
+          final int index = entry.key;
+          final account = entry.value;
           final isAdmin = account.role == UserRole.admin;
+          // Calculate actual row number considering pagination
+          final rowNumber = (_currentPage * _rowsPerPage) + index + 1;
+          
           return DataRow(
             cells: [
+              DataCell(Text(rowNumber.toString(), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textSecondary))),
               DataCell(Row(
                 children: [
                   AppAvatar(

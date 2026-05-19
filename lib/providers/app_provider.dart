@@ -668,7 +668,7 @@ class AppProvider with ChangeNotifier {
           day: s['day_name'] as String,
           slotLabel: s['slot_label'] as String,
           classId: s['class_id'] as String? ?? '',
-          subjectId: subject?['name'] as String? ?? '',
+          subjectId: s['subject_id'] as String? ?? '',
           roomId: s['room_name'] as String? ?? '',
           teacherId: s['teacher_id'] as String? ?? '',
           isEvent: s['is_event'] as bool? ?? false,
@@ -1713,7 +1713,7 @@ class AppProvider with ChangeNotifier {
     try {
       final supabase = Supabase.instance.client;
       await supabase.from('schedules').upsert({
-        'id': _generateUuidFromText(entry.id),
+        'id': entry.id.length >= 36 ? entry.id : _generateUuidFromText(entry.id),
         'class_id': entry.classId,
         'day_name': entry.day,
         'slot_label': entry.slotLabel,
@@ -1733,7 +1733,8 @@ class AppProvider with ChangeNotifier {
     notifyListeners();
     try {
       final supabase = Supabase.instance.client;
-      await supabase.from('schedules').delete().eq('id', _generateUuidFromText(id));
+      final uuid = id.length >= 36 ? id : _generateUuidFromText(id);
+      await supabase.from('schedules').delete().eq('id', uuid);
     } catch (e) {
       debugPrint("Error deleting schedule entry: $e");
     }
