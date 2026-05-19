@@ -46,7 +46,22 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(children: [const Icon(LucideIcons.plus, color: AppColors.primary), const SizedBox(width: 12), Text('Atur Jadwal - $slotLabel', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))]),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.plus, color: AppColors.primary), 
+                          const SizedBox(width: 12), 
+                          Expanded(
+                            child: Text(
+                              'Atur Jadwal - $slotLabel', 
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ]
+                      ),
+                    ),
+                    const SizedBox(width: 16),
                     Row(
                       children: [
                         const Text('Kegiatan', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
