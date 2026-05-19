@@ -267,7 +267,7 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
             );
             
             if (entry.id.isEmpty) return _buildEmptyCell(cls.id, slot.label);
-            if (entry.isEvent) return _buildBreakCell(entry.customTitle ?? 'Kegiatan');
+            if (entry.isEvent) return _buildBreakCell(entry);
 
             final subject = provider.subjects.firstWhere((s) => s.name.toLowerCase() == entry.subjectId?.toLowerCase() || s.id == entry.subjectId, orElse: () => Subject(id: '', name: 'N/A', teacherIds: []));
             final room = provider.rooms.firstWhere((r) => r.name.toLowerCase() == entry.roomId?.toLowerCase() || r.id == entry.roomId, orElse: () => Room(id: '', name: 'N/A', category: ''));
@@ -280,12 +280,24 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
     );
   }
 
-  Widget _buildBreakCell(String label) {
+  Widget _buildBreakCell(ScheduleEntry entry) {
+    final label = entry.customTitle ?? 'Kegiatan';
     return Container(
       width: 180,
-      height: 110,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.03), border: const Border(left: BorderSide(color: AppColors.border))),
-      child: Center(child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12, letterSpacing: 1.5))),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12, letterSpacing: 1.5), textAlign: TextAlign.center),
+          const Spacer(),
+          InkWell(
+            onTap: () => context.read<AppProvider>().deleteScheduleEntry(entry.id),
+            child: const Text('Hapus', style: TextStyle(fontSize: 10, color: AppColors.danger, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
