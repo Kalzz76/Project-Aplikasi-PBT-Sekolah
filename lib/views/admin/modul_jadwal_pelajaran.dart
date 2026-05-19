@@ -284,14 +284,15 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
     final label = entry.customTitle ?? 'Kegiatan';
     return Container(
       width: 180,
+      height: 110,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.03), border: const Border(left: BorderSide(color: AppColors.border))),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const SizedBox(height: 8),
           Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary, fontSize: 12, letterSpacing: 1.5), textAlign: TextAlign.center),
-          const Spacer(),
+          const SizedBox(height: 12),
           InkWell(
             onTap: () => context.read<AppProvider>().deleteScheduleEntry(entry.id),
             child: const Text('Hapus', style: TextStyle(fontSize: 10, color: AppColors.danger, fontWeight: FontWeight.bold)),
