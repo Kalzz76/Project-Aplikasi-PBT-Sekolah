@@ -1720,7 +1720,7 @@ class AppProvider with ChangeNotifier {
         'is_event': entry.isEvent,
         'custom_title': entry.customTitle,
         'subject_id': entry.subjectId,
-        'room_id': entry.roomId,
+        'room_name': entry.roomId, // Database column is room_name
         'teacher_id': entry.teacherId,
       });
     } catch (e) {
