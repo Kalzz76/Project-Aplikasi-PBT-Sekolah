@@ -59,6 +59,7 @@ class _AppEntry extends StatefulWidget {
 class _AppEntryState extends State<_AppEntry> {
   UserRole? _selectedRole;
   bool _wasLoggedIn = false; // Flag untuk mendeteksi transisi logout
+  bool _hasSeenSplash = false;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +72,10 @@ class _AppEntryState extends State<_AppEntry> {
       _wasLoggedIn = false;
       // Gunakan delay agar tidak terjadi setState saat build
       Future.delayed(Duration.zero, () {
-        if (mounted) setState(() => _selectedRole = null);
+        if (mounted) setState(() {
+          _selectedRole = null;
+          _hasSeenSplash = false; // Reset agar bisa splash ulang saat logout (opsional)
+        });
       });
     }
 
@@ -83,7 +87,13 @@ class _AppEntryState extends State<_AppEntry> {
     // 2. Jika belum pilih role, tampilkan Splash + Role Selection
     if (_selectedRole == null) {
       return SplashScreen(
-        onRoleSelected: (role) => setState(() => _selectedRole = role),
+        skipAnimation: _hasSeenSplash,
+        onRoleSelected: (role) {
+          setState(() {
+            _selectedRole = role;
+            _hasSeenSplash = true; // Tandai sudah melihat splash
+          });
+        },
       );
     }
 

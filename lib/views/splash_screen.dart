@@ -4,7 +4,8 @@ import '../models/user.dart';
 
 class SplashScreen extends StatefulWidget {
   final Function(UserRole) onRoleSelected;
-  const SplashScreen({super.key, required this.onRoleSelected});
+  final bool skipAnimation;
+  const SplashScreen({super.key, required this.onRoleSelected, this.skipAnimation = false});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -107,10 +108,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     _card3Y = Tween(begin: 30.0, end: 0.0).animate(CurvedAnimation(
       parent: _ctrl, curve: const Interval(0.86, 0.94, curve: Curves.easeOutCubic)));
 
-    // Add a slight delay before starting to prevent initial frame lag
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) _ctrl.forward();
-    });
+    if (widget.skipAnimation) {
+      _ctrl.value = 1.0;
+    } else {
+      // Add a slight delay before starting to prevent initial frame lag
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) _ctrl.forward();
+      });
+    }
   }
 
   @override
