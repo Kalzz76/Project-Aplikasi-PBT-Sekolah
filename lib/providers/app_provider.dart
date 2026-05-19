@@ -110,6 +110,9 @@ class AppProvider with ChangeNotifier {
   List<CallNotification> _calls = [];
   List<CallNotification> get calls => _calls;
 
+  List<CallNotification> _callHistory = [];
+  List<CallNotification> get callHistory => _callHistory;
+
   void callTeacher(String classId, String className, String senderName, String teacherId, {String? subjectName}) {
     _calls.insert(0, CallNotification(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -180,6 +183,25 @@ class AppProvider with ChangeNotifier {
       if (isLessonTimeActive(day, e.slotLabel)) return true;
     }
     return false;
+  }
+
+  bool isLessonTimePassed(String day, String slotLabel) {
+    if (day != currentDayName) return false;
+    final slots = getTimeSlots(day);
+    final slot = slots.cast<TimeSlot?>().firstWhere(
+      (s) => s!.label == slotLabel,
+      orElse: () => null,
+    );
+    if (slot == null || slot.isBreak) return false;
+    return SchoolScheduleUtils.isNowAfterRange(slot.timeRange);
+  }
+
+  bool isScheduleGroupPassed(List<ScheduleEntry> entries, String day) {
+    // If all entries in the group have passed, the group has passed
+    for (final e in entries) {
+      if (!isLessonTimePassed(day, e.slotLabel)) return false;
+    }
+    return entries.isNotEmpty;
   }
 
   List<Attendance> getTodayAttendanceForSession({
@@ -510,6 +532,10 @@ class AppProvider with ChangeNotifier {
   }
 
   void dismissCall(String id) {
+    final call = _calls.cast<CallNotification?>().firstWhere((c) => c!.id == id, orElse: () => null);
+    if (call != null) {
+      _callHistory.insert(0, call);
+    }
     _calls.removeWhere((c) => c.id == id);
     notifyListeners();
   }
@@ -661,13 +687,15 @@ class AppProvider with ChangeNotifier {
 
       // 5. Fetch Schedules
       final dbSchedules = await supabase.from('schedules').select('*, subjects(name)');
-      _schedules = dbSchedules.map<ScheduleEntry>((s) {
+      _schedules = dbSchedules
+          .where((s) => s['class_id'] != null && s['class_id'].toString().isNotEmpty)
+          .map<ScheduleEntry>((s) {
         final subject = s['subjects'] as Map?;
         return ScheduleEntry(
           id: s['id'] as String,
           day: s['day_name'] as String,
           slotLabel: s['slot_label'] as String,
-          classId: s['class_id'] as String? ?? '',
+          classId: s['class_id'] as String,
           subjectId: s['subject_id'] as String? ?? '',
           roomId: s['room_name'] as String? ?? '',
           teacherId: s['teacher_id'] as String? ?? '',
@@ -731,7 +759,9 @@ class AppProvider with ChangeNotifier {
             orElse: () => AttendanceStatus.hadir,
           );
 
-          final markedBy = a['marked_by'] as String? ?? '';
+          // marked_by column doesn't exist, marked_by_role does
+          final markedBy = a.containsKey('marked_by') ? (a['marked_by'] as String? ?? '') : '';
+          final markedByRole = a['marked_by_role'] as String? ?? 'admin';
           String markedByName = 'System';
           if (markedBy.isNotEmpty) {
             final accs = _accounts.where((acc) => acc.id == markedBy || acc.nipNis == markedBy).toList();
@@ -758,10 +788,10 @@ class AppProvider with ChangeNotifier {
             date: DateTime.parse(a['date'] as String).toLocal(),
             status: status,
             markedBy: markedBy,
-            markedByRole: a['marked_by_role'] as String? ?? 'admin',
+            markedByRole: markedByRole,
             markedByName: markedByName,
             reason: a['reason'] as String?,
-            notes: a['notes'] as String?,
+            notes: a.containsKey('notes') ? a['notes'] as String? : null,
           );
         }).toList();
       } catch (e) {
@@ -1592,8 +1622,7 @@ class AppProvider with ChangeNotifier {
 
     try {
       final supabase = Supabase.instance.client;
-      final todayStart = DateTime(now.year, now.month, now.day).toUtc().toIso8601String();
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toUtc().toIso8601String();
+      final dateString = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       final List<Map<String, dynamic>> attendanceInserts = [];
       final List<Attendance> localRecords = [];
@@ -1606,8 +1635,7 @@ class AppProvider with ChangeNotifier {
             .delete()
             .eq('student_id', studentId)
             .eq('subject_id', sub.id)
-            .gte('date', todayStart)
-            .lte('date', todayEnd);
+            .eq('date', dateString);
 
         _attendance.removeWhere((a) =>
             a.studentId == studentId &&
@@ -1622,11 +1650,9 @@ class AppProvider with ChangeNotifier {
           'student_id': studentId,
           'class_id': cls.id,
           'subject_id': sub.id,
-          'date': now.toUtc().toIso8601String(),
+          'date': '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
           'status': dbStatus,
-          'marked_by': user.id,
           'marked_by_role': role,
-          'reason': reason,
         });
 
         localRecords.add(Attendance(

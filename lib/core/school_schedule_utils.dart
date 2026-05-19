@@ -41,6 +41,13 @@ class SchoolScheduleUtils {
     return !now.isBefore(range.start) && now.isBefore(range.end);
   }
 
+  static bool isNowAfterRange(String timeRange) {
+    final range = parseTimeRange(timeRange);
+    if (range == null) return false;
+    final now = ChronosService.instance.now();
+    return now.isAfter(range.end) || now.isAtSameMomentAs(range.end);
+  }
+
   static String normalizeClassName(String name) =>
       name.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 

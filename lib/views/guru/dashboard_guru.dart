@@ -56,11 +56,22 @@ class _DashboardGuruState extends State<DashboardGuru> {
       final prev = schedules[i - 1];
       final curr = schedules[i];
 
-      // Check if they are consecutive in the timeSlots list
+      // Check if they are consecutive, skipping breaks in between
       final idxPrev = slots.indexWhere((s) => s.label == prev.slotLabel);
       final idxCurr = slots.indexWhere((s) => s.label == curr.slotLabel);
 
-      bool isConsecutive = (idxCurr == idxPrev + 1);
+      // Check if all slots between prev and curr are breaks
+      bool onlyBreaksBetween = true;
+      if (idxCurr > idxPrev + 1) {
+        for (int j = idxPrev + 1; j < idxCurr; j++) {
+          if (!slots[j].isBreak) {
+            onlyBreaksBetween = false;
+            break;
+          }
+        }
+      }
+
+      bool isConsecutive = (idxCurr == idxPrev + 1) || (idxCurr > idxPrev + 1 && onlyBreaksBetween);
       bool sameSubject = prev.subjectId == curr.subjectId && prev.classId == curr.classId && !prev.isEvent && !curr.isEvent;
 
       if (isConsecutive && sameSubject) {
@@ -237,9 +248,108 @@ class _DashboardGuruState extends State<DashboardGuru> {
           CustomButton(
             variant: ButtonVariant.ghost,
             size: ButtonSize.sm,
+            onClick: () => _showCallHistoryDialog(context),
             child: Text('Lihat Riwayat', style: TextStyle(color: isDark ? Colors.redAccent : const Color(0xFF991B1B))),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showCallHistoryDialog(BuildContext context) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    final isDark = provider.isDarkMode;
+    final userId = provider.currentUser.id;
+    final history = provider.callHistory.where((c) => c.teacherId == userId).toList();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.red.withOpacity(0.1) : const Color(0xFFFEF2F2),
+                  borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.history, color: isDark ? Colors.redAccent : const Color(0xFF991B1B)),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Riwayat Panggilan',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.redAccent : const Color(0xFF991B1B)),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(LucideIcons.x, color: isDark ? Colors.white60 : AppColors.textSecondary),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // Body
+              Flexible(
+                child: history.isEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.all(40),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.bellOff, size: 48, color: isDark ? Colors.white30 : AppColors.textMuted),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Belum ada riwayat panggilan.',
+                              style: TextStyle(fontSize: 14, color: isDark ? Colors.white60 : AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: history.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: isDark ? Colors.white10 : const Color(0xFFE2E8F0)),
+                        itemBuilder: (_, index) {
+                          final call = history[index];
+                          final timeStr = '${call.timestamp.hour.toString().padLeft(2, '0')}:${call.timestamp.minute.toString().padLeft(2, '0')}';
+                          final dateStr = '${call.timestamp.day}/${call.timestamp.month}/${call.timestamp.year}';
+                          return ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+                              child: const Icon(LucideIcons.megaphone, color: Colors.red, size: 18),
+                            ),
+                            title: Text(
+                              call.className,
+                              style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)),
+                            ),
+                            subtitle: Text(
+                              'Oleh: ${call.senderName}${call.subjectName != null ? " — ${call.subjectName}" : ""}',
+                              style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textSecondary),
+                            ),
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(timeStr, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary)),
+                                Text(dateStr, style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : AppColors.textMuted)),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -308,6 +418,8 @@ class _DashboardGuruState extends State<DashboardGuru> {
         final isAlreadyMarked = markedAttendance.isNotEmpty;
         final markedBySec = provider.isAttendanceFilledBySecretary(entry.classId, subject.name);
         final guruBlocked = markedBySec;
+
+        final isPassed = provider.isScheduleGroupPassed(group.entries, provider.currentDayName);
 
         return CustomCard(
           noPadding: true,
@@ -378,7 +490,7 @@ class _DashboardGuruState extends State<DashboardGuru> {
                                 provider.startAttendanceSession(cls, subject);
                               }
                             : null,
-                        child: Text(isOngoing ? 'Ubah Absensi' : 'Edit saat jam pelajaran'),
+                        child: Text(isOngoing ? 'Ubah Absensi' : (isPassed ? 'Selesai (Sudah Absen)' : 'Edit saat jam pelajaran')),
                       )
                     else
                       CustomButton(
@@ -391,7 +503,7 @@ class _DashboardGuruState extends State<DashboardGuru> {
                                 provider.startAttendanceSession(cls, subject);
                               }
                             : null,
-                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : 'Belum Waktunya'),
+                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : (isPassed ? 'Selesai (Terlewat)' : 'Belum Waktunya')),
                       ),
                   ],
                 ),

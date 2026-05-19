@@ -37,7 +37,18 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
       final idxPrev = slots.indexWhere((s) => s.label == prev.slotLabel);
       final idxCurr = slots.indexWhere((s) => s.label == curr.slotLabel);
 
-      bool isConsecutive = (idxCurr == idxPrev + 1);
+      // Check if all slots between prev and curr are breaks
+      bool onlyBreaksBetween = true;
+      if (idxCurr > idxPrev + 1) {
+        for (int j = idxPrev + 1; j < idxCurr; j++) {
+          if (!slots[j].isBreak) {
+            onlyBreaksBetween = false;
+            break;
+          }
+        }
+      }
+
+      bool isConsecutive = (idxCurr == idxPrev + 1) || (idxCurr > idxPrev + 1 && onlyBreaksBetween);
       bool sameSubject = prev.subjectId == curr.subjectId && prev.classId == curr.classId && !prev.isEvent && !curr.isEvent;
 
       if (isConsecutive && sameSubject) {
@@ -201,6 +212,8 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
         final isMarked = provider.getTodayAttendanceForSession(classId: entry.classId, subjectName: subject.name).isNotEmpty;
         final isOngoing = provider.isScheduleGroupActive(group.entries, provider.currentDayName);
 
+        final isPassed = provider.isScheduleGroupPassed(group.entries, provider.currentDayName);
+
         return Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: CustomCard(
@@ -255,10 +268,25 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     },
                     child: const Text('Isi Absen'),
                   ),
-                ] else if (isSecretary && !isOngoing && !isMarked)
+                ] else if (isMarked)
+                  isSecretary && isOngoing
+                    ? CustomButton(
+                        size: ButtonSize.sm,
+                        variant: ButtonVariant.outline,
+                        onClick: () {
+                          provider.setActiveScheduleForSession(entry);
+                          provider.startAttendanceSession(cls, subject, forceSecretary: true);
+                          provider.setActiveMenu('isi_absensi');
+                        },
+                        child: const Text('Ubah Absensi'),
+                      )
+                    : const CustomBadge(variant: BadgeVariant.success, child: Text('SUDAH ABSEN'))
+                else if (isPassed)
+                  Text('Selesai', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted))
+                else if (isSecretary && !isOngoing && !isMarked)
                   Text('Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted))
-                else if (isMarked)
-                  const CustomBadge(variant: BadgeVariant.success, child: Text('SUDAH ABSEN')),
+                else
+                  Text(isPassed ? 'Selesai' : 'Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
               ],
             ),
           ),

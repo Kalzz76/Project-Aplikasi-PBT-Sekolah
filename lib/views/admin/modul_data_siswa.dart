@@ -484,7 +484,8 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                   separatorBuilder: (context, index) => const Divider(height: 1),
                   itemBuilder: (context, index) {
                     final student = pagedStudents[index];
-                    return _buildStudentRow(student, provider);
+                    final rowNumber = ((_currentPage - 1) * _itemsPerPage) + index + 1;
+                    return _buildStudentRow(student, provider, rowNumber);
                   },
                 ),
               ),
@@ -528,6 +529,7 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
       color: isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC),
       child: Row(
         children: [
+          Expanded(flex: 1, child: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           Expanded(flex: 5, child: Text('NIS / NISN', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           Expanded(flex: 6, child: Text('NAMA LENGKAP', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
           Expanded(flex: 1, child: Text('L/P', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white70 : AppColors.textSecondary))),
@@ -538,12 +540,13 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
     );
   }
 
-  Widget _buildStudentRow(Student student, AppProvider provider) {
+  Widget _buildStudentRow(Student student, AppProvider provider, int rowNumber) {
     final isDark = provider.isDarkMode;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
       child: Row(
         children: [
+          Expanded(flex: 1, child: Text(rowNumber.toString(), style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textSecondary))),
           Expanded(flex: 5, child: Text('${student.nis} / ${student.nisn}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)))),
           Expanded(flex: 6, child: Text(student.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.getTextColor(isDark)))),
           Expanded(flex: 1, child: Text(student.gender, style: TextStyle(color: AppColors.getTextColor(isDark)))),

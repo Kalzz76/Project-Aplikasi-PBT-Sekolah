@@ -240,8 +240,8 @@ class DashboardAdmin extends StatelessWidget {
     final isDark = provider.isDarkMode;
     final today = ChronosService.instance.now();
     final todayAttendance = provider.attendance.where((a) => a.date.day == today.day && a.date.month == today.month && a.date.year == today.year).toList();
-    final uniqueStudents = todayAttendance.map((a) => a.studentId).toSet().length;
-    final presenceRate = provider.students.isNotEmpty ? (uniqueStudents / provider.students.length * 100).toStringAsFixed(1) : '0';
+    final hadirStudents = todayAttendance.where((a) => a.status == AttendanceStatus.hadir).map((a) => a.studentId).toSet().length;
+    final presenceRate = provider.students.isNotEmpty ? (hadirStudents / provider.students.length * 100).toStringAsFixed(1) : '0';
 
     // Mocking a thousands separator for the "real" feel if needed, but here we just show the actual count
     String formatNum(int num) => num.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');

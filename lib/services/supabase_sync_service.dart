@@ -117,19 +117,24 @@ class SupabaseSyncService {
         });
       }
 
-      // 5. Sinkronisasi Jadwal (Schedules)
+      // 5. Sinkronisasi Jadwal (Schedules) - Hapus dulu semua lalu insert ulang
+      onProgress?.call("Membersihkan jadwal lama...", 0.85);
+      debugPrint("Membersihkan jadwal lama di Supabase...");
+      // Delete all existing schedules first to prevent duplicates
+      await _supabase.from('schedules').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
       onProgress?.call("Sinkronisasi Jadwal Pelajaran...", 0.9);
       debugPrint("Sinkronisasi Jadwal Pelajaran...");
       for (final schedule in provider.schedules) {
-        final classId = classIdMap[schedule.classId];
-        final subjectId = mapelIdMap[schedule.subjectId];
-        final teacherId = teacherIdMap[schedule.teacherId];
-
-        await _supabase.from('schedules').upsert({
-          'class_id': classId,
-          'subject_id': subjectId,
-          'teacher_id': teacherId,
-          'room_name': schedule.roomId, 
+        if (schedule.classId.isEmpty) continue; // Skip invalid/trash records
+        
+        // schedule properties are already UUIDs or valid values.
+        await _supabase.from('schedules').insert({
+          'id': schedule.id.length >= 36 ? schedule.id : _generateUuidFromText(schedule.id),
+          'class_id': schedule.classId,
+          'subject_id': schedule.subjectId != null && schedule.subjectId!.isNotEmpty ? schedule.subjectId : null,
+          'teacher_id': schedule.teacherId != null && schedule.teacherId!.isNotEmpty ? schedule.teacherId : null,
+          'room_name': schedule.roomId ?? '',
           'day_name': schedule.day,
           'slot_label': schedule.slotLabel,
           'is_event': schedule.isEvent,

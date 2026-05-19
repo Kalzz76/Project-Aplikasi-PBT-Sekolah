@@ -11,6 +11,7 @@ import '../../widgets/custom_badge.dart';
 import '../../models/schedule.dart';
 import '../../models/student.dart';
 import '../../models/school_class.dart';
+import '../../models/subject.dart';
 import '../../widgets/export_attendance_dialog.dart';
 import '../../services/attendance_export_service.dart';
 import '../../core/chronos_service.dart';
@@ -123,8 +124,12 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
 
   List<Attendance> _getExportableAttendance(AppProvider provider, {String? classId}) {
     return provider.attendance.where((a) {
-      final matchesDate = (a.date.isAfter(_startDate.subtract(const Duration(seconds: 1))) && 
-                          a.date.isBefore(_endDate.add(const Duration(days: 1))));
+      final attDate = DateTime(a.date.year, a.date.month, a.date.day);
+      final start = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      final end = DateTime(_endDate.year, _endDate.month, _endDate.day);
+      
+      final matchesDate = (attDate.isAtSameMomentAs(start) || attDate.isAfter(start)) && 
+                          (attDate.isAtSameMomentAs(end) || attDate.isBefore(end));
       final matchesClass = classId == null || a.classId == classId;
       return matchesDate && matchesClass;
     }).toList();
@@ -312,10 +317,14 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
                 final classStudents = provider.students.where((s) => s.kelas == cls.name).toList();
                 
                 // Rekap Bulanan: Seluruh rentang Tanggal Awal - Tanggal Akhir
-                final classAtt = provider.attendance.where((a) => 
-                  a.classId == cls.id && 
-                  (a.date.isAfter(_startDate.subtract(const Duration(seconds: 1))) && a.date.isBefore(_endDate.add(const Duration(days: 1))))
-                ).toList();
+                final classAtt = provider.attendance.where((a) {
+                  if (a.classId != cls.id) return false;
+                  final attDate = DateTime(a.date.year, a.date.month, a.date.day);
+                  final start = DateTime(_startDate.year, _startDate.month, _startDate.day);
+                  final end = DateTime(_endDate.year, _endDate.month, _endDate.day);
+                  return (attDate.isAtSameMomentAs(start) || attDate.isAfter(start)) && 
+                         (attDate.isAtSameMomentAs(end) || attDate.isBefore(end));
+                }).toList();
 
                 int h = 0, s = 0, i = 0, a = 0;
                 for (final student in classStudents) {
@@ -434,7 +443,10 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
       final dayName = dayNames[DateFormat('EEEE').format(_startDate)] ?? 'Senin';
       
       final rawSchedules = provider.schedules.where((s) => s.classId == classId && s.day == dayName && s.subjectId != null).toList();
-      const slotOrder = ['Pembiasaan', 'Jam 1', 'Jam 2', 'Jam 3', 'Jam 4', 'Istirahat', 'Jam 5', 'Jam 6', 'Jam 7', 'Jam 8', 'Jam 9', 'Jam 10'];
+      
+      final daySlots = provider.getTimeSlots(dayName);
+      final slotOrder = daySlots.map((s) => s.label).toList();
+      
       rawSchedules.sort((a, b) {
         final indexA = slotOrder.indexOf(a.slotLabel);
         final indexB = slotOrder.indexOf(b.slotLabel);
@@ -478,7 +490,7 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
                             const Padding(padding: EdgeInsets.all(60), child: Center(child: Text('Tidak ada siswa di kelas ini.')))
                           else
                             ...students.asMap().entries.map((entry) {
-                              return _buildDailyDetailRow(entry.key + 1, entry.value, schedules, dayAttendance, needsScroll ? minRequiredWidth : constraints.maxWidth);
+                              return _buildDailyDetailRow(entry.key + 1, entry.value, schedules, dayAttendance, needsScroll ? minRequiredWidth : constraints.maxWidth, provider);
                             }),
                         ],
                       ),
@@ -494,10 +506,14 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
 
     // Logic for Monthly Recap (Active Tab 1) - Show Totals
     final students = provider.students.where((s) => s.kelas == (cls?.name ?? classId)).toList();
-    final rangeAttendance = provider.attendance.where((a) => 
-      a.classId == classId && 
-      (a.date.isAfter(_startDate.subtract(const Duration(seconds: 1))) && a.date.isBefore(_endDate.add(const Duration(days: 1))))
-    ).toList();
+    final rangeAttendance = provider.attendance.where((a) {
+      if (a.classId != classId) return false;
+      final attDate = DateTime(a.date.year, a.date.month, a.date.day);
+      final start = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      final end = DateTime(_endDate.year, _endDate.month, _endDate.day);
+      return (attDate.isAtSameMomentAs(start) || attDate.isAfter(start)) && 
+             (attDate.isAtSameMomentAs(end) || attDate.isBefore(end));
+    }).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,7 +614,7 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
     );
   }
 
-  Widget _buildDailyDetailRow(int no, Student student, List<ScheduleEntry> schedules, List<Attendance> attendance, double containerWidth) {
+  Widget _buildDailyDetailRow(int no, Student student, List<ScheduleEntry> schedules, List<Attendance> attendance, double containerWidth, AppProvider provider) {
     final studentAtt = attendance.where((a) => a.studentId == student.id).toList();
     
     int h = 0, s = 0, i = 0, a = 0;
@@ -621,8 +637,9 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
             _cellText('-', 100, color: AppColors.textMuted)
           else
             ...schedules.map((sch) {
+              final subject = provider.subjects.firstWhere((sub) => sub.id == sch.subjectId || sub.name == sch.subjectId, orElse: () => Subject(id: sch.subjectId ?? '', name: sch.subjectId ?? '', teacherIds: []));
               final att = studentAtt.firstWhere(
-                (a) => a.subjectId == sch.subjectId, 
+                (a) => a.subjectId == subject.id || a.subjectId == subject.name, 
                 orElse: () => Attendance(
                   id: '', 
                   studentId: '', 
