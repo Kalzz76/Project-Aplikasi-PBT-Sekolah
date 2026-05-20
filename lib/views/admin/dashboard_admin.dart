@@ -240,8 +240,9 @@ class DashboardAdmin extends StatelessWidget {
     final isDark = provider.isDarkMode;
     final today = ChronosService.instance.now();
     final todayAttendance = provider.attendance.where((a) => a.date.day == today.day && a.date.month == today.month && a.date.year == today.year).toList();
-    final hadirStudents = todayAttendance.where((a) => a.status == AttendanceStatus.hadir).map((a) => a.studentId).toSet().length;
-    final presenceRate = provider.students.isNotEmpty ? (hadirStudents / provider.students.length * 100).toStringAsFixed(1) : '0';
+    final hadirEntries = todayAttendance.where((a) => a.status == AttendanceStatus.hadir).length;
+    final totalEntries = todayAttendance.length;
+    final presenceRate = totalEntries > 0 ? (hadirEntries / totalEntries * 100).toStringAsFixed(1) : '0';
 
     // Mocking a thousands separator for the "real" feel if needed, but here we just show the actual count
     String formatNum(int num) => num.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
@@ -354,6 +355,7 @@ class DashboardAdmin extends StatelessWidget {
                   m.hasAttendance,
                   m.filledByLabel ?? m.filledByRole ?? '-',
                   m.studentCount,
+                  m.lastUpdatedAt,
                 );
               },
             ),
@@ -363,7 +365,13 @@ class DashboardAdmin extends StatelessWidget {
     );
   }
 
-  Widget _buildMonitorRow(String className, bool isDone, String filledBy, int count) {
+  Widget _buildMonitorRow(String className, bool isDone, String filledBy, int count, DateTime? lastUpdatedAt) {
+    String timeStr = '';
+    if (lastUpdatedAt != null) {
+      final d = lastUpdatedAt;
+      timeStr = ' • ${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    }
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -386,7 +394,7 @@ class DashboardAdmin extends StatelessWidget {
               children: [
                 Text(className, style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text(
-                  isDone ? 'Diisi oleh: $filledBy' : 'Belum ada absensi hari ini',
+                  isDone ? 'Diisi oleh: $filledBy$timeStr' : 'Belum ada absensi hari ini',
                   style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],

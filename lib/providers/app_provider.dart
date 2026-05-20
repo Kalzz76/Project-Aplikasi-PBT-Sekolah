@@ -267,6 +267,11 @@ class AppProvider with ChangeNotifier {
     return records.isNotEmpty && records.any((a) => a.markedByRole == 'siswa');
   }
 
+  bool isAttendanceFilledByTeacher(String classId, String subjectName) {
+    final records = getTodayAttendanceForSession(classId: classId, subjectName: subjectName);
+    return records.isNotEmpty && records.any((a) => a.markedByRole == 'guru');
+  }
+
   bool canGuruMarkAttendance(String classId, String subjectName) {
     if (isAttendanceFilledBySecretary(classId, subjectName)) return false;
     return true;
@@ -1668,7 +1673,8 @@ class AppProvider with ChangeNotifier {
 
     try {
       final supabase = Supabase.instance.client;
-      final dateString = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
+      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59, 999).toIso8601String();
 
       final List<Map<String, dynamic>> attendanceInserts = [];
       final List<Attendance> localRecords = [];
@@ -1681,7 +1687,8 @@ class AppProvider with ChangeNotifier {
             .delete()
             .eq('student_id', studentId)
             .eq('subject_id', sub.id)
-            .eq('date', dateString);
+            .gte('date', startOfDay)
+            .lte('date', endOfDay);
 
         _attendance.removeWhere((a) =>
             a.studentId == studentId &&
@@ -1696,7 +1703,7 @@ class AppProvider with ChangeNotifier {
           'student_id': studentId,
           'class_id': cls.id,
           'subject_id': sub.id,
-          'date': '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
+          'date': now.toIso8601String(),
           'status': dbStatus,
           'marked_by_role': role,
         });
