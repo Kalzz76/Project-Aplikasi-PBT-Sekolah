@@ -48,45 +48,53 @@ class _DashboardGuruState extends State<DashboardGuru> {
     });
 
     List<GroupedSchedule> grouped = [];
-    if (schedules.isEmpty) return [];
-
-    List<ScheduleEntry> currentGroup = [schedules[0]];
-
-    for (int i = 1; i < schedules.length; i++) {
-      final prev = schedules[i - 1];
-      final curr = schedules[i];
-
-      // Check if they are consecutive, skipping breaks in between
-      final idxPrev = slots.indexWhere((s) => s.label == prev.slotLabel);
-      final idxCurr = slots.indexWhere((s) => s.label == curr.slotLabel);
-
-      // Check if all slots between prev and curr are breaks
-      bool onlyBreaksBetween = true;
-      if (idxCurr > idxPrev + 1) {
-        for (int j = idxPrev + 1; j < idxCurr; j++) {
-          if (!slots[j].isBreak) {
-            onlyBreaksBetween = false;
-            break;
-          }
+    
+    for (final curr in schedules) {
+      if (curr.isEvent) {
+        final slot = slots.firstWhere((s) => s.label == curr.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00.00 - 00.00'));
+        grouped.add(GroupedSchedule(
+          entries: [curr],
+          timeRange: slot.timeRange,
+          label: curr.slotLabel,
+          isEvent: true,
+        ));
+      } else {
+        // Find if there's an existing GroupedSchedule with same classId, subjectId, and roomId
+        final existingIdx = grouped.indexWhere((g) =>
+            !g.isEvent &&
+            g.entries.first.classId == curr.classId &&
+            g.entries.first.subjectId == curr.subjectId &&
+            g.entries.first.roomId == curr.roomId);
+            
+        if (existingIdx != -1) {
+          final existing = grouped[existingIdx];
+          existing.entries.add(curr);
+          
+          // Recalculate time range and label for this grouped schedule
+          grouped[existingIdx] = _createGroup(existing.entries, slots);
+        } else {
+          final slot = slots.firstWhere((s) => s.label == curr.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00.00 - 00.00'));
+          grouped.add(GroupedSchedule(
+            entries: [curr],
+            timeRange: slot.timeRange,
+            label: curr.slotLabel,
+            isEvent: false,
+          ));
         }
       }
-
-      bool isConsecutive = (idxCurr == idxPrev + 1) || (idxCurr > idxPrev + 1 && onlyBreaksBetween);
-      bool sameSubject = prev.subjectId == curr.subjectId && prev.classId == curr.classId && !prev.isEvent && !curr.isEvent;
-
-      if (isConsecutive && sameSubject) {
-        currentGroup.add(curr);
-      } else {
-        grouped.add(_createGroup(currentGroup, slots));
-        currentGroup = [curr];
-      }
     }
-    grouped.add(_createGroup(currentGroup, slots));
 
     return grouped;
   }
 
   GroupedSchedule _createGroup(List<ScheduleEntry> group, List<TimeSlot> slots) {
+    // Sort group entries by slot index just to be absolutely sure
+    group.sort((a, b) {
+      final idxA = slots.indexWhere((s) => s.label == a.slotLabel);
+      final idxB = slots.indexWhere((s) => s.label == b.slotLabel);
+      return idxA.compareTo(idxB);
+    });
+
     final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel);
     final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel);
     
@@ -482,28 +490,28 @@ class _DashboardGuruState extends State<DashboardGuru> {
                     else if (isAlreadyMarked)
                       CustomButton(
                         width: double.infinity,
-                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
+                        variant: (isOngoing || isPassed) ? ButtonVariant.primary : ButtonVariant.outline,
                         icon: const Icon(LucideIcons.clipboardCheck, size: 18),
-                        onClick: isOngoing
+                        onClick: (isOngoing || isPassed)
                             ? () {
                                 provider.setActiveScheduleForSession(entry);
                                 provider.startAttendanceSession(cls, subject);
                               }
                             : null,
-                        child: Text(isOngoing ? 'Ubah Absensi' : (isPassed ? 'Selesai (Sudah Absen)' : 'Edit saat jam pelajaran')),
+                        child: Text((isOngoing || isPassed) ? 'Ubah Absensi' : 'Edit saat jam pelajaran'),
                       )
                     else
                       CustomButton(
                         width: double.infinity,
-                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
+                        variant: (isOngoing || isPassed) ? ButtonVariant.primary : ButtonVariant.outline,
                         icon: const Icon(LucideIcons.clipboardCheck, size: 18),
-                        onClick: isOngoing
+                        onClick: (isOngoing || isPassed)
                             ? () {
                                 provider.setActiveScheduleForSession(entry);
                                 provider.startAttendanceSession(cls, subject);
                               }
                             : null,
-                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : (isPassed ? 'Selesai (Terlewat)' : 'Belum Waktunya')),
+                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : (isPassed ? 'Isi Absensi (Terlewat)' : 'Belum Waktunya')),
                       ),
                   ],
                 ),

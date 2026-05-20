@@ -179,10 +179,32 @@ class AppProvider with ChangeNotifier {
   }
 
   bool isScheduleGroupActive(List<ScheduleEntry> entries, String day) {
+    if (day != currentDayName || entries.isEmpty) return false;
+    final slots = getTimeSlots(day);
+    
+    DateTime? minStart;
+    DateTime? maxEnd;
+    
     for (final e in entries) {
-      if (isLessonTimeActive(day, e.slotLabel)) return true;
+      final slot = slots.cast<TimeSlot?>().firstWhere(
+        (s) => s!.label == e.slotLabel,
+        orElse: () => null,
+      );
+      if (slot == null) continue;
+      final range = SchoolScheduleUtils.parseTimeRange(slot.timeRange);
+      if (range == null) continue;
+      
+      if (minStart == null || range.start.isBefore(minStart)) {
+        minStart = range.start;
+      }
+      if (maxEnd == null || range.end.isAfter(maxEnd)) {
+        maxEnd = range.end;
+      }
     }
-    return false;
+    
+    if (minStart == null || maxEnd == null) return false;
+    final now = systemNow();
+    return !now.isBefore(minStart) && now.isBefore(maxEnd);
   }
 
   bool isLessonTimePassed(String day, String slotLabel) {
@@ -197,11 +219,35 @@ class AppProvider with ChangeNotifier {
   }
 
   bool isScheduleGroupPassed(List<ScheduleEntry> entries, String day) {
-    // If all entries in the group have passed, the group has passed
-    for (final e in entries) {
-      if (!isLessonTimePassed(day, e.slotLabel)) return false;
+    if (entries.isEmpty) return false;
+    if (day != currentDayName) {
+      final daysOfWeek = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+      final todayIdx = daysOfWeek.indexOf(currentDayName);
+      final queryIdx = daysOfWeek.indexOf(day);
+      if (queryIdx < todayIdx) return true;
+      if (queryIdx > todayIdx) return false;
     }
-    return entries.isNotEmpty;
+    
+    final slots = getTimeSlots(day);
+    DateTime? maxEnd;
+    
+    for (final e in entries) {
+      final slot = slots.cast<TimeSlot?>().firstWhere(
+        (s) => s!.label == e.slotLabel,
+        orElse: () => null,
+      );
+      if (slot == null) continue;
+      final range = SchoolScheduleUtils.parseTimeRange(slot.timeRange);
+      if (range == null) continue;
+      
+      if (maxEnd == null || range.end.isAfter(maxEnd)) {
+        maxEnd = range.end;
+      }
+    }
+    
+    if (maxEnd == null) return false;
+    final now = systemNow();
+    return now.isAfter(maxEnd) || now.isAtSameMomentAs(maxEnd);
   }
 
   List<Attendance> getTodayAttendanceForSession({

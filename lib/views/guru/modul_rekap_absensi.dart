@@ -31,7 +31,15 @@ class _ModulRekapAbsensiState extends State<ModulRekapAbsensi> {
     final user = provider.currentUser;
     final allRekap = provider.getTeacherAttendanceRekap(user.id);
     
-    final classes = ['Semua Kelas', ...provider.classes.map((c) => c.name)];
+    final teacherSchedules = provider.schedules.where((s) => s.teacherId == user.id && !s.isEvent).toList();
+    final teacherClassIds = teacherSchedules.map((s) => s.classId).toSet();
+    final teacherClasses = provider.classes.where((c) => teacherClassIds.contains(c.id) || teacherClassIds.contains(c.name)).toList();
+    final classes = ['Semua Kelas', ...teacherClasses.map((c) => c.name)];
+
+    if (!classes.contains(_selectedClass)) {
+      _selectedClass = 'Semua Kelas';
+    }
+
     final subjects = [
       'Semua Mapel',
       ...allRekap.map((e) => e.subjectId).toSet(),

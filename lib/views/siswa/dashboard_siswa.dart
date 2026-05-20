@@ -21,6 +21,8 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
 
   List<GroupedSchedule> _groupSchedules(List<ScheduleEntry> schedules, AppProvider provider, String day) {
     if (schedules.isEmpty) return [];
+    
+    // Sort by slot index to ensure correct order
     final slots = provider.getTimeSlots(day);
     schedules.sort((a, b) {
       final idxA = slots.indexWhere((s) => s.label == a.slotLabel);
@@ -29,51 +31,77 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
     });
 
     List<GroupedSchedule> grouped = [];
-    List<ScheduleEntry> currentGroup = [schedules[0]];
-
-    for (int i = 1; i < schedules.length; i++) {
-      final prev = schedules[i - 1];
-      final curr = schedules[i];
-      final idxPrev = slots.indexWhere((s) => s.label == prev.slotLabel);
-      final idxCurr = slots.indexWhere((s) => s.label == curr.slotLabel);
-
-      // Check if all slots between prev and curr are breaks
-      bool onlyBreaksBetween = true;
-      if (idxCurr > idxPrev + 1) {
-        for (int j = idxPrev + 1; j < idxCurr; j++) {
-          if (!slots[j].isBreak) {
-            onlyBreaksBetween = false;
-            break;
-          }
+    
+    for (final curr in schedules) {
+      if (curr.isEvent) {
+        final slot = slots.firstWhere((s) => s.label == curr.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00.00 - 00.00'));
+        grouped.add(GroupedSchedule(
+          entries: [curr],
+          timeRange: slot.timeRange,
+          label: curr.slotLabel,
+          isEvent: true,
+        ));
+      } else {
+        // Find if there's an existing GroupedSchedule with same classId, subjectId, and roomId
+        final existingIdx = grouped.indexWhere((g) =>
+            !g.isEvent &&
+            g.entries.first.classId == curr.classId &&
+            g.entries.first.subjectId == curr.subjectId &&
+            g.entries.first.roomId == curr.roomId);
+            
+        if (existingIdx != -1) {
+          final existing = grouped[existingIdx];
+          existing.entries.add(curr);
+          
+          // Recalculate time range and label for this grouped schedule
+          grouped[existingIdx] = _createGroup(existing.entries, slots);
+        } else {
+          final slot = slots.firstWhere((s) => s.label == curr.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00.00 - 00.00'));
+          grouped.add(GroupedSchedule(
+            entries: [curr],
+            timeRange: slot.timeRange,
+            label: curr.slotLabel,
+            isEvent: false,
+          ));
         }
       }
-
-      bool isConsecutive = (idxCurr == idxPrev + 1) || (idxCurr > idxPrev + 1 && onlyBreaksBetween);
-      bool sameSubject = prev.subjectId == curr.subjectId && prev.classId == curr.classId && !prev.isEvent && !curr.isEvent;
-
-      if (isConsecutive && sameSubject) {
-        currentGroup.add(curr);
-      } else {
-        grouped.add(_createGroup(currentGroup, slots));
-        currentGroup = [curr];
-      }
     }
-    grouped.add(_createGroup(currentGroup, slots));
+
     return grouped;
   }
 
   GroupedSchedule _createGroup(List<ScheduleEntry> group, List<TimeSlot> slots) {
+    // Sort group entries by slot index just to be absolutely sure
+    group.sort((a, b) {
+      final idxA = slots.indexWhere((s) => s.label == a.slotLabel);
+      final idxB = slots.indexWhere((s) => s.label == b.slotLabel);
+      return idxA.compareTo(idxB);
+    });
+
     final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel);
     final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel);
+    
     final startTime = firstSlot.timeRange.split(' - ')[0];
     final endTime = lastSlot.timeRange.split(' - ')[1];
+    
     String label = group.first.slotLabel;
     if (group.length > 1) {
+      // Extract numeric part if possible, e.g. "Jam 1" -> "1"
       final startNum = group.first.slotLabel.replaceAll(RegExp(r'[^0-9]'), '');
       final endNum = group.last.slotLabel.replaceAll(RegExp(r'[^0-9]'), '');
-      label = startNum.isNotEmpty && endNum.isNotEmpty ? 'Jam $startNum - $endNum' : '${group.first.slotLabel} - ${group.last.slotLabel}';
+      if (startNum.isNotEmpty && endNum.isNotEmpty) {
+        label = 'Jam $startNum - $endNum';
+      } else {
+        label = '${group.first.slotLabel} - ${group.last.slotLabel}';
+      }
     }
-    return GroupedSchedule(entries: group, timeRange: '$startTime - $endTime', label: label, isEvent: group.first.isEvent);
+
+    return GroupedSchedule(
+      entries: group,
+      timeRange: '$startTime - $endTime',
+      label: label,
+      isEvent: group.first.isEvent,
+    );
   }
 
   @override
@@ -239,23 +267,25 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     ],
                   ),
                 ),
-                if (isSecretary && isOngoing && !isMarked) ...[
+                if (isSecretary && (isOngoing || isPassed) && !isMarked) ...[
                   CustomButton(
                     variant: ButtonVariant.ghost,
                     size: ButtonSize.sm,
                     icon: const Icon(LucideIcons.megaphone, size: 16),
-                    onClick: () {
-                      provider.callTeacher(
-                        entry.classId,
-                        cls.name,
-                        provider.currentUser.name,
-                        teacher.id,
-                        subjectName: subject.name,
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Panggilan terkirim ke Guru.')),
-                      );
-                    },
+                    onClick: isOngoing
+                        ? () {
+                            provider.callTeacher(
+                              entry.classId,
+                              cls.name,
+                              provider.currentUser.name,
+                              teacher.id,
+                              subjectName: subject.name,
+                            );
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Panggilan terkirim ke Guru.')),
+                            );
+                          }
+                        : null,
                     child: const Text('Panggil Guru'),
                   ),
                   const SizedBox(width: 8),
@@ -266,10 +296,10 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                       provider.startAttendanceSession(cls, subject, forceSecretary: true);
                       provider.setActiveMenu('isi_absensi');
                     },
-                    child: const Text('Isi Absen'),
+                    child: Text(isOngoing ? 'Isi Absen' : 'Isi Absen (Terlewat)'),
                   ),
                 ] else if (isMarked)
-                  isSecretary && isOngoing
+                  isSecretary && (isOngoing || isPassed)
                     ? CustomButton(
                         size: ButtonSize.sm,
                         variant: ButtonVariant.outline,
