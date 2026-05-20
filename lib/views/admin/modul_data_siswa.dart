@@ -74,9 +74,9 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                         const SizedBox(height: 20),
                         Row(
                           children: [
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NIS'), TextField(controller: nisController, decoration: _inputStyle('Nomor Induk'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly])])),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NIS'), TextField(controller: nisController, decoration: _inputStyle('Nomor Induk (maks. 10)'), keyboardType: TextInputType.number, maxLength: 10, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)])])),
                             const SizedBox(width: 16),
-                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NISN'), TextField(controller: nisnController, decoration: _inputStyle('Nomor Nasional'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly])])),
+                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFieldLabel('NISN'), TextField(controller: nisnController, decoration: _inputStyle('Nomor Nasional (maks. 10)'), keyboardType: TextInputType.number, maxLength: 10, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)])])),
                           ],
                         ),
                         const SizedBox(height: 20),

@@ -84,7 +84,7 @@ class _ModulDataGuruState extends State<ModulDataGuru> {
                 TextField(controller: nameController, decoration: _inputStyle('Contoh: Drs. H. Bambang'), inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))]),
                 const SizedBox(height: 20),
                 _buildFieldLabel('NIP'),
-                TextField(controller: nipController, decoration: _inputStyle('Nomor Induk Pegawai'), keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+                TextField(controller: nipController, decoration: _inputStyle('Nomor Induk Pegawai (maks. 18 digit)'), keyboardType: TextInputType.number, maxLength: 18, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(18)]),
                 const SizedBox(height: 20),
                 _buildFieldLabel('Mata Pelajaran (Autocomplete)'),
                 Autocomplete<Subject>(
