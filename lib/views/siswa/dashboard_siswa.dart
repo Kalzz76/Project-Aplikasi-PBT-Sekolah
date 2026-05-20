@@ -268,69 +268,123 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     ],
                   ),
                 ),
-                if (isSecretary && (isOngoing || isPassed) && !isMarked) ...[
-                  CustomButton(
-                    variant: ButtonVariant.ghost,
-                    size: ButtonSize.sm,
-                    icon: const Icon(LucideIcons.megaphone, size: 16),
-                    onClick: isOngoing
-                        ? () {
-                            provider.callTeacher(
-                              entry.classId,
-                              cls.name,
-                              provider.currentUser.name,
-                              teacher.id,
-                              subjectName: subject.name,
-                            );
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Panggilan terkirim ke Guru.')),
-                            );
-                          }
-                        : null,
-                    child: const Text('Panggil Guru'),
-                  ),
-                  const SizedBox(width: 8),
-                  CustomButton(
-                    size: ButtonSize.sm,
-                    onClick: () {
-                      provider.setActiveScheduleForSession(entry);
-                      provider.startAttendanceSession(cls, subject, forceSecretary: true);
-                      provider.setActiveMenu('isi_absensi');
-                    },
-                    child: Text(isOngoing ? 'Isi Absen' : 'Isi Absen (Terlewat)'),
-                  ),
-                ] else if (isMarked)
-                  siswaBlocked
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(LucideIcons.lock, color: Colors.orange, size: 16),
-                            SizedBox(width: 8),
-                            Text('DIISI GURU', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
-                          ],
-                        ),
-                      )
-                    : isSecretary && (isOngoing || isPassed)
-                      ? CustomButton(
-                          size: ButtonSize.sm,
-                          variant: ButtonVariant.outline,
-                          onClick: () {
-                            provider.setActiveScheduleForSession(entry);
-                            provider.startAttendanceSession(cls, subject, forceSecretary: true);
-                            provider.setActiveMenu('isi_absensi');
-                          },
-                          child: const Text('Ubah Absensi'),
-                        )
-                      : const CustomBadge(variant: BadgeVariant.success, child: Text('SUDAH ABSEN'))
-                else if (isPassed)
-                  Text('Selesai', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted))
-                else if (isSecretary && !isOngoing && !isMarked)
-                  Text('Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted))
-                else
-                  Text(isPassed ? 'Selesai' : 'Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Dual badges row
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Badge 1: Filler Info
+                        isMarked
+                            ? (siswaBlocked
+                                ? const CustomBadge(
+                                    variant: BadgeVariant.orange,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(LucideIcons.lock, size: 12, color: Color(0xFFB45309)),
+                                        SizedBox(width: 4),
+                                        Text('DIISI GURU'),
+                                      ],
+                                    ),
+                                  )
+                                : const CustomBadge(
+                                    variant: BadgeVariant.indigo,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(LucideIcons.lock, size: 12, color: Color(0xFF4338CA)),
+                                        SizedBox(width: 4),
+                                        Text('DIISI SEKRETARIS'),
+                                      ],
+                                    ),
+                                  ))
+                            : const CustomBadge(
+                                variant: BadgeVariant.defaultValue,
+                                child: Text('BELUM DIISI'),
+                              ),
+                        const SizedBox(width: 8),
+                        // Badge 2: Status (SELESAI / BELUM)
+                        (isMarked || isPassed)
+                            ? const CustomBadge(
+                                variant: BadgeVariant.success,
+                                child: Text('SELESAI'),
+                              )
+                            : const CustomBadge(
+                                variant: BadgeVariant.warning,
+                                child: Text('BELUM'),
+                              ),
+                      ],
+                    ),
+                    // Action Buttons / Extra text
+                    if (isSecretary) ...[
+                      if (!isMarked) ...[
+                        if (isOngoing) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CustomButton(
+                                variant: ButtonVariant.ghost,
+                                size: ButtonSize.sm,
+                                icon: const Icon(LucideIcons.megaphone, size: 16),
+                                onClick: () {
+                                  provider.callTeacher(
+                                    entry.classId,
+                                    cls.name,
+                                    provider.currentUser.name,
+                                    teacher.id,
+                                    subjectName: subject.name,
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Panggilan terkirim ke Guru.')),
+                                  );
+                                },
+                                child: const Text('Panggil Guru'),
+                              ),
+                              const SizedBox(width: 8),
+                              CustomButton(
+                                size: ButtonSize.sm,
+                                onClick: () {
+                                  provider.setActiveScheduleForSession(entry);
+                                  provider.startAttendanceSession(cls, subject, forceSecretary: true);
+                                  provider.setActiveMenu('isi_absensi');
+                                },
+                                child: const Text('Isi Absen'),
+                              ),
+                            ],
+                          ),
+                        ] else if (!isPassed) ...[
+                          const SizedBox(height: 8),
+                          Text('Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
+                        ]
+                      ] else ...[
+                        // Already marked
+                        if (!siswaBlocked && isOngoing) ...[
+                          const SizedBox(height: 8),
+                          CustomButton(
+                            size: ButtonSize.sm,
+                            variant: ButtonVariant.outline,
+                            onClick: () {
+                              provider.setActiveScheduleForSession(entry);
+                              provider.startAttendanceSession(cls, subject, forceSecretary: true);
+                              provider.setActiveMenu('isi_absensi');
+                            },
+                            child: const Text('Ubah Absensi'),
+                          ),
+                        ]
+                      ],
+                    ] else ...[
+                      // Regular student (not secretary)
+                      if (!isMarked && !isPassed && !isOngoing) ...[
+                        const SizedBox(height: 8),
+                        Text('Belum waktunya', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
+                      ]
+                    ],
+                  ],
+                ),
               ],
             ),
           ),

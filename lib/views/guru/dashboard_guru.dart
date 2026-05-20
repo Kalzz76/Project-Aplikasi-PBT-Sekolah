@@ -474,44 +474,83 @@ class _DashboardGuruState extends State<DashboardGuru> {
                       ),
                     ),
                     const Spacer(),
-                    if (guruBlocked)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(LucideIcons.lock, color: Colors.orange, size: 20),
-                            SizedBox(width: 8),
-                            Text('DIISI SEKRETARIS', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13)),
-                          ],
-                        ),
-                      )
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Badge 1: Filler Info
+                        isAlreadyMarked
+                            ? (guruBlocked
+                                ? const CustomBadge(
+                                    variant: BadgeVariant.indigo,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(LucideIcons.lock, size: 12, color: Color(0xFF4338CA)),
+                                        SizedBox(width: 4),
+                                        Text('DIISI SEKRETARIS'),
+                                      ],
+                                    ),
+                                  )
+                                : const CustomBadge(
+                                    variant: BadgeVariant.orange,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(LucideIcons.lock, size: 12, color: Color(0xFFB45309)),
+                                        SizedBox(width: 4),
+                                        Text('DIISI GURU'),
+                                      ],
+                                    ),
+                                  ))
+                            : const CustomBadge(
+                                variant: BadgeVariant.defaultValue,
+                                child: Text('BELUM DIISI'),
+                              ),
+                        const SizedBox(width: 8),
+                        // Badge 2: Status (SELESAI / BELUM)
+                        (isAlreadyMarked || isPassed)
+                            ? const CustomBadge(
+                                variant: BadgeVariant.success,
+                                child: Text('SELESAI'),
+                              )
+                            : const CustomBadge(
+                                variant: BadgeVariant.warning,
+                                child: Text('BELUM'),
+                              ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (isPassed)
+                      // No button if passed (locked)
+                      const SizedBox.shrink()
+                    else if (guruBlocked)
+                      // No button if blocked by secretary
+                      const SizedBox.shrink()
                     else if (isAlreadyMarked)
                       CustomButton(
                         width: double.infinity,
-                        variant: (isOngoing || isPassed) ? ButtonVariant.primary : ButtonVariant.outline,
+                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
                         icon: const Icon(LucideIcons.clipboardCheck, size: 18),
-                        onClick: (isOngoing || isPassed)
+                        onClick: isOngoing
                             ? () {
                                 provider.setActiveScheduleForSession(entry);
                                 provider.startAttendanceSession(cls, subject);
                               }
                             : null,
-                        child: Text((isOngoing || isPassed) ? 'Ubah Absensi' : 'Edit saat jam pelajaran'),
+                        child: Text(isOngoing ? 'Ubah Absensi' : 'Edit saat jam pelajaran'),
                       )
                     else
                       CustomButton(
                         width: double.infinity,
-                        variant: (isOngoing || isPassed) ? ButtonVariant.primary : ButtonVariant.outline,
+                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
                         icon: const Icon(LucideIcons.clipboardCheck, size: 18),
-                        onClick: (isOngoing || isPassed)
+                        onClick: isOngoing
                             ? () {
                                 provider.setActiveScheduleForSession(entry);
                                 provider.startAttendanceSession(cls, subject);
                               }
                             : null,
-                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : (isPassed ? 'Isi Absensi (Terlewat)' : 'Belum Waktunya')),
+                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : 'Belum Waktunya'),
                       ),
                   ],
                 ),
