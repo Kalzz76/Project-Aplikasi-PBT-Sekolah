@@ -74,7 +74,8 @@ class _AppEntryState extends State<_AppEntry> {
       Future.delayed(Duration.zero, () {
         if (mounted) setState(() {
           _selectedRole = null;
-          _hasSeenSplash = false; // Reset agar bisa splash ulang saat logout (opsional)
+          // _hasSeenSplash tetap true agar tidak memutar ulang animasi splash saat logout
+          // User langsung diarahkan ke halaman pemilihan role
         });
       });
     }
