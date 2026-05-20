@@ -128,6 +128,10 @@ class _ModulDataGuruState extends State<ModulDataGuru> {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIP hanya boleh diisi angka.')));
                         return;
                       }
+                      if (nipController.text.length != 18) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIP harus terdiri dari tepat 18 digit.')));
+                        return;
+                      }
                       final provider = context.read<AppProvider>();
                       if (provider.teachers.any((t) => t.nip == nipController.text && t.id != teacher?.id)) {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error: NIP sudah ada!')));

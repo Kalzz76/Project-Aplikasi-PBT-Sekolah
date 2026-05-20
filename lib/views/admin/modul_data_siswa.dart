@@ -140,8 +140,16 @@ class _ModulDataSiswaState extends State<ModulDataSiswa> {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIS hanya boleh diisi angka.')));
                               return;
                             }
+                            if (nisController.text.length != 10) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NIS harus terdiri dari tepat 10 digit.')));
+                              return;
+                            }
                             if (nisnController.text.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(nisnController.text)) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NISN hanya boleh diisi angka.')));
+                              return;
+                            }
+                            if (nisnController.text.isNotEmpty && nisnController.text.length != 10) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NISN harus terdiri dari tepat 10 digit.')));
                               return;
                             }
                             
