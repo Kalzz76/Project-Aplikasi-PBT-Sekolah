@@ -1687,20 +1687,18 @@ class AppProvider with ChangeNotifier {
 
   List<Attendance> getTeacherAttendanceRekap(String teacherId, {DateTime? filterDate}) {
     final teacherSchedules = _schedules.where((s) => s.teacherId == teacherId && !s.isEvent).toList();
-    final classIds = teacherSchedules.map((s) => s.classId).toSet();
-    final subjectNames = teacherSchedules
-        .map((s) => subjectDisplayName(s.subjectId ?? ''))
-        .where((n) => n.isNotEmpty)
-        .toSet();
+    
+    final teacherTeachings = teacherSchedules.map((s) {
+      final subName = subjectDisplayName(s.subjectId ?? '');
+      return '${s.classId}_$subName';
+    }).toSet();
 
     return _attendance.where((a) {
-      final classMatch = classIds.contains(a.classId);
-      final subjectMatch = subjectNames.contains(a.subjectId);
-      final secretaryMatch = a.markedByRole == 'siswa' && classMatch;
-      if (!classMatch && !secretaryMatch) return false;
-      if (a.markedByRole == 'guru' && !subjectMatch && !classMatch) return false;
+      final teachingKey = '${a.classId}_${a.subjectId}';
+      if (!teacherTeachings.contains(teachingKey)) return false;
+      
       if (filterDate != null && !isSameCalendarDay(a.date, filterDate)) return false;
-      return classMatch || (a.markedByRole == 'siswa' && subjectNames.contains(a.subjectId));
+      return true;
     }).toList();
   }
 

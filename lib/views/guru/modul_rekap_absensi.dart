@@ -195,52 +195,72 @@ class _ModulRekapAbsensiState extends State<ModulRekapAbsensi> {
 
     return CustomCard(
       noPadding: true,
-      child: Column(
-        children: [
-          _buildTableHead(),
-          const Divider(height: 1),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: data.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final item = data[index];
-              final student = provider.students.firstWhere((s) => s.id == item.studentId, orElse: () => Student(id: '', nis: '', nisn: '', name: 'Siswa', gender: '', kelas: '', position: ''));
-              
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(student.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text(student.nis, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
-                        ],
-                      ),
-                    ),
-                    Expanded(flex: 1, child: Text(item.classId, style: const TextStyle(fontSize: 14))),
-                    Expanded(flex: 2, child: Text(item.subjectId, style: const TextStyle(fontSize: 14))),
-                    Expanded(flex: 2, child: Text('${item.date.day}/${item.date.month}/${item.date.year}', style: const TextStyle(fontSize: 14))),
-                    Expanded(flex: 2, child: Text(item.markedByLabel, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
-                    Expanded(
-                      flex: 1,
-                      child: Center(
-                        child: CustomBadge(
-                          variant: _getBadgeVariant(item.status),
-                          child: Text(item.statusLabel),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          const double minWidth = 850.0;
+          final bool needsScroll = minWidth > constraints.maxWidth;
+
+          Widget tableContent = Column(
+            children: [
+              _buildTableHead(),
+              const Divider(height: 1),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: data.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final item = data[index];
+                  final student = provider.students.firstWhere((s) => s.id == item.studentId, orElse: () => Student(id: '', nis: '', nisn: '', name: 'Siswa', gender: '', kelas: '', position: ''));
+                  
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(student.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              Text(student.nis, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                            ],
+                          ),
                         ),
-                      ),
+                        Expanded(flex: 1, child: Text(provider.findClassByIdOrName(item.classId)?.name ?? item.classId, style: const TextStyle(fontSize: 14))),
+                        Expanded(flex: 3, child: Text(item.subjectId, style: const TextStyle(fontSize: 14))),
+                        Expanded(flex: 2, child: Text('${item.date.day}/${item.date.month}/${item.date.year}', style: const TextStyle(fontSize: 14))),
+                        Expanded(flex: 2, child: Text(item.markedByLabel, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))),
+                        Expanded(
+                          flex: 1,
+                          child: Center(
+                            child: CustomBadge(
+                              variant: _getBadgeVariant(item.status),
+                              child: Text(item.statusLabel),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
+                  );
+                },
+              ),
+            ],
+          );
+
+          if (needsScroll) {
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                width: minWidth,
+                child: tableContent,
+              ),
+            );
+          }
+
+          return tableContent;
+        },
       ),
     );
   }
@@ -253,7 +273,7 @@ class _ModulRekapAbsensiState extends State<ModulRekapAbsensi> {
         children: const [
           Expanded(flex: 3, child: Text('SISWA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
           Expanded(flex: 1, child: Text('KELAS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
-          Expanded(flex: 2, child: Text('MAPEL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
+          Expanded(flex: 3, child: Text('MAPEL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
           Expanded(flex: 2, child: Text('TANGGAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
           Expanded(flex: 2, child: Text('DIISI OLEH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted))),
           Expanded(flex: 1, child: Center(child: Text('STATUS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.textMuted)))),
