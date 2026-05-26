@@ -9,7 +9,9 @@ import '../widgets/digital_clock.dart';
 import '../widgets/app_avatar.dart';
 
 class Header extends StatelessWidget {
-  const Header({super.key});
+  final bool showMenuButton;
+
+  const Header({super.key, this.showMenuButton = false});
 
   @override
   Widget build(BuildContext context) {
@@ -17,13 +19,27 @@ class Header extends StatelessWidget {
 
     final headerContent = Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: provider.isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white,
         border: Border(bottom: BorderSide(color: provider.isDarkMode ? Colors.white.withOpacity(0.05) : AppColors.border)),
       ),
       child: Row(
         children: [
+          // Hamburger button di mobile
+          if (showMenuButton) ...[
+            IconButton(
+              onPressed: () => Scaffold.of(context).openDrawer(),
+              icon: Icon(
+                LucideIcons.menu,
+                size: 22,
+                color: provider.isDarkMode ? Colors.white70 : AppColors.textSecondary,
+              ),
+              tooltip: 'Menu',
+            ),
+            const SizedBox(width: 4),
+          ],
+
           // Breadcrumbs
           Row(
             children: [
@@ -140,15 +156,6 @@ class Header extends StatelessWidget {
       ),
     );
 
-    if (provider.isDarkMode) {
-      return ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-          child: headerContent,
-        ),
-      );
-    }
-    
     return headerContent;
   }
 

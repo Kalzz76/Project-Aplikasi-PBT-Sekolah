@@ -116,20 +116,6 @@ class Sidebar extends StatelessWidget {
       ),
     );
 
-    if (isDark) {
-      return ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05))),
-            ),
-            child: sidebarContent,
-          ),
-        ),
-      );
-    }
-    
     return sidebarContent;
   }
 

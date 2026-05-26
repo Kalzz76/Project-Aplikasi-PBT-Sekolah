@@ -643,43 +643,57 @@ class AppProvider with ChangeNotifier {
   Future<void> fetchEverything() async {
     _isFetching = true;
     notifyListeners();
+    debugPrint("AppProvider: Starting to fetch data from Supabase...");
+
     try {
       final supabase = Supabase.instance.client;
 
       // 1. Fetch Subjects
-      final dbSubjects = await supabase.from('subjects').select();
-      _subjects = dbSubjects.map<Subject>((s) => Subject(
-        id: s['id'] as String,
-        name: s['name'] as String,
-        teacherIds: [],
-      )).toList();
+      try {
+        debugPrint("AppProvider: Fetching subjects...");
+        final dbSubjects = await supabase.from('subjects').select();
+        _subjects = dbSubjects.map<Subject>((s) => Subject(
+          id: s['id'] as String,
+          name: s['name'] as String,
+          teacherIds: [],
+        )).toList();
+        debugPrint("AppProvider: Fetched ${_subjects.length} subjects.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching subjects: $e");
+      }
 
       // 2. Fetch Teachers
-      final dbTeachers = await supabase.from('teachers').select('*, profiles(name, avatar_url), teacher_subjects(subject_id)');
-      _teachers = dbTeachers.map<Teacher>((t) {
-        final profile = t['profiles'] as Map?;
-        final tSubjects = t['teacher_subjects'] as List?;
-        
-        final subjectsList = <String>[];
-        if (tSubjects != null) {
-          for (var ts in tSubjects) {
-            final subId = ts['subject_id'] as String?;
-            final matched = _subjects.firstWhere((sub) => sub.id == subId, orElse: () => Subject(id: '', name: '', teacherIds: []));
-            if (matched.name.isNotEmpty) {
-              subjectsList.add(matched.name);
+      try {
+        debugPrint("AppProvider: Fetching teachers...");
+        final dbTeachers = await supabase.from('teachers').select('*, profiles(name, avatar_url), teacher_subjects(subject_id)');
+        _teachers = dbTeachers.map<Teacher>((t) {
+          final profile = t['profiles'] as Map?;
+          final tSubjects = t['teacher_subjects'] as List?;
+          
+          final subjectsList = <String>[];
+          if (tSubjects != null) {
+            for (var ts in tSubjects) {
+              final subId = ts['subject_id'] as String?;
+              final matched = _subjects.firstWhere((sub) => sub.id == subId, orElse: () => Subject(id: '', name: '', teacherIds: []));
+              if (matched.name.isNotEmpty) {
+                subjectsList.add(matched.name);
+              }
             }
           }
-        }
 
-        return Teacher(
-          id: t['id'] as String,
-          nip: t['nip'] as String,
-          name: profile?['name'] as String? ?? 'No Name',
-          position: 'Guru Tetap',
-          subjects: subjectsList,
-          avatar: profile?['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${t['id']}',
-        );
-      }).toList();
+          return Teacher(
+            id: t['id'] as String,
+            nip: t['nip'] as String,
+            name: profile?['name'] as String? ?? 'No Name',
+            position: 'Guru Tetap',
+            subjects: subjectsList,
+            avatar: profile?['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${t['id']}',
+          );
+        }).toList();
+        debugPrint("AppProvider: Fetched ${_teachers.length} teachers.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching teachers: $e");
+      }
 
       // Re-populate teacherIds in _subjects
       for (var i = 0; i < _subjects.length; i++) {
@@ -693,35 +707,46 @@ class AppProvider with ChangeNotifier {
       }
 
       // 3. Fetch Classes
-      final dbClasses = await supabase.from('classes').select('*, teachers(profiles(name))');
-      _classes = dbClasses.map<SchoolClass>((c) {
-        final teacher = c['teachers'] as Map?;
-        final profile = teacher?['profiles'] as Map?;
-        return SchoolClass(
-          id: c['id'] as String,
-          name: c['name'] as String,
-          homeroomTeacherId: c['homeroom_teacher_id'] as String? ?? '',
-          homeroomTeacherName: profile?['name'] as String? ?? 'Belum diatur',
-          roomName: c['room_name'] as String? ?? '-',
-          totalStudents: 0,
-        );
-      }).toList();
+      try {
+        debugPrint("AppProvider: Fetching classes...");
+        final dbClasses = await supabase.from('classes').select('*, profiles(name)');
+        _classes = dbClasses.map<SchoolClass>((c) {
+          final teacherProfile = c['profiles'] as Map?;
+          return SchoolClass(
+            id: c['id'] as String,
+            name: c['name'] as String,
+            homeroomTeacherId: c['homeroom_teacher_id'] as String? ?? '',
+            homeroomTeacherName: teacherProfile?['name'] as String? ?? 'Belum diatur',
+            roomName: c['room_name'] as String? ?? '-',
+            totalStudents: 0,
+          );
+        }).toList();
+        debugPrint("AppProvider: Fetched ${_classes.length} classes.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching classes: $e");
+      }
 
       // 4. Fetch Students
-      final dbStudents = await supabase.from('students').select('*, profiles(name, avatar_url), classes(name)');
-      _students = dbStudents.map<Student>((s) {
-        final profile = s['profiles'] as Map?;
-        final cls = s['classes'] as Map?;
-        return Student(
-          id: s['id'] as String,
-          nis: s['nis'] as String,
-          nisn: s['nisn'] as String? ?? '',
-          name: profile?['name'] as String? ?? 'No Name',
-          gender: s['gender'] as String? ?? 'L',
-          kelas: cls?['name'] as String? ?? '',
-          position: s['position'] as String? ?? 'Anggota',
-        );
-      }).toList();
+      try {
+        debugPrint("AppProvider: Fetching students...");
+        final dbStudents = await supabase.from('students').select('*, profiles(name, avatar_url), classes(name)');
+        _students = dbStudents.map<Student>((s) {
+          final profile = s['profiles'] as Map?;
+          final cls = s['classes'] as Map?;
+          return Student(
+            id: s['id'] as String,
+            nis: s['nis'] as String,
+            nisn: s['nisn'] as String? ?? '',
+            name: profile?['name'] as String? ?? 'No Name',
+            gender: s['gender'] as String? ?? 'L',
+            kelas: cls?['name'] as String? ?? '',
+            position: s['position'] as String? ?? 'Anggota',
+          );
+        }).toList();
+        debugPrint("AppProvider: Fetched ${_students.length} students.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching students: $e");
+      }
 
       // Recompute totalStudents
       for (var i = 0; i < _classes.length; i++) {
@@ -737,61 +762,73 @@ class AppProvider with ChangeNotifier {
       }
 
       // 5. Fetch Schedules
-      final dbSchedules = await supabase.from('schedules').select('*, subjects(name)');
-      _schedules = dbSchedules
-          .where((s) => s['class_id'] != null && s['class_id'].toString().isNotEmpty)
-          .map<ScheduleEntry>((s) {
-        final subject = s['subjects'] as Map?;
-        return ScheduleEntry(
-          id: s['id'] as String,
-          day: s['day_name'] as String,
-          slotLabel: s['slot_label'] as String,
-          classId: s['class_id'] as String,
-          subjectId: s['subject_id'] as String? ?? '',
-          roomId: s['room_name'] as String? ?? '',
-          teacherId: s['teacher_id'] as String? ?? '',
-          isEvent: s['is_event'] as bool? ?? false,
-          customTitle: s['custom_title'] as String?,
-        );
-      }).toList();
-
-      // 6. Fetch Accounts
-      final dbProfiles = await supabase.from('profiles').select();
-      final List<UserProfile> loadedAccounts = [];
-      for (final p in dbProfiles) {
-        final roleStr = p['role'] as String? ?? 'siswa';
-        final role = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.siswa);
-        
-        if (role == UserRole.siswa) {
-          final student = _students.firstWhere(
-            (s) => s.id == p['id'],
-            orElse: () => Student(id: '', nis: '', nisn: '', name: '', gender: '', kelas: '', position: ''),
+      try {
+        debugPrint("AppProvider: Fetching schedules...");
+        final dbSchedules = await supabase.from('schedules').select('*, subjects(name)');
+        _schedules = dbSchedules
+            .where((s) => s['class_id'] != null && s['class_id'].toString().isNotEmpty)
+            .map<ScheduleEntry>((s) {
+          return ScheduleEntry(
+            id: s['id'] as String,
+            day: s['day_name'] as String,
+            slotLabel: s['slot_label'] as String,
+            classId: s['class_id'] as String,
+            subjectId: s['subject_id'] as String? ?? '',
+            roomId: s['room_name'] as String? ?? '',
+            teacherId: s['teacher_id'] as String? ?? '',
+            isEvent: s['is_event'] as bool? ?? false,
+            customTitle: s['custom_title'] as String?,
           );
-          if (student.id.isEmpty || !student.position.contains('Sekretaris')) {
-            continue; // Skip regular students and dummy/orphaned student profiles
-          }
-        }
-        
-        final studentMatch = role == UserRole.siswa 
-            ? _students.firstWhere((s) => s.id == p['id'], orElse: () => Student(id: '', nis: '', nisn: '', name: '', gender: '', kelas: '', position: ''))
-            : null;
-        final teacherMatch = role == UserRole.guru 
-            ? _teachers.firstWhere((t) => t.id == p['id'], orElse: () => Teacher(id: '', nip: '', name: '', position: '', avatar: '', subjects: []))
-            : null;
-
-        loadedAccounts.add(UserProfile(
-          id: p['id'] as String,
-          name: p['name'] as String,
-          username: p['username'] as String? ?? '',
-          password: role == UserRole.admin ? 'password' : (role == UserRole.guru ? 'guru123' : 'siswa123'),
-          role: role,
-          avatar: p['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${p['id']}',
-          kelas: studentMatch?.kelas,
-          nipNis: role == UserRole.siswa ? studentMatch?.nis : (role == UserRole.guru ? teacherMatch?.nip : null),
-          position: studentMatch?.position,
-        ));
+        }).toList();
+        debugPrint("AppProvider: Fetched ${_schedules.length} schedules.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching schedules: $e");
       }
-      _accounts = loadedAccounts;
+
+      // 6. Fetch Accounts (Profiles)
+      try {
+        debugPrint("AppProvider: Fetching profiles for accounts...");
+        final dbProfiles = await supabase.from('profiles').select();
+        final List<UserProfile> loadedAccounts = [];
+        for (final p in dbProfiles) {
+          final roleStr = p['role'] as String? ?? 'siswa';
+          final role = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.siswa);
+          
+          if (role == UserRole.siswa) {
+            final student = _students.firstWhere(
+              (s) => s.id == p['id'],
+              orElse: () => Student(id: '', nis: '', nisn: '', name: '', gender: '', kelas: '', position: ''),
+            );
+            if (student.id.isEmpty || (!student.position.contains('Sekretaris') && !student.position.contains('Ketua'))) {
+              // Note: Allow certain student positions for login if needed, or stick to sekretaris
+              if (!student.position.contains('Sekretaris')) continue; 
+            }
+          }
+          
+          final studentMatch = role == UserRole.siswa 
+              ? _students.firstWhere((s) => s.id == p['id'], orElse: () => Student(id: '', nis: '', nisn: '', name: '', gender: '', kelas: '', position: ''))
+              : null;
+          final teacherMatch = role == UserRole.guru 
+              ? _teachers.firstWhere((t) => t.id == p['id'], orElse: () => Teacher(id: '', nip: '', name: '', position: '', avatar: '', subjects: []))
+              : null;
+
+          loadedAccounts.add(UserProfile(
+            id: p['id'] as String,
+            name: p['name'] as String,
+            username: p['username'] as String? ?? '',
+            password: role == UserRole.admin ? 'password' : (role == UserRole.guru ? 'guru123' : 'siswa123'),
+            role: role,
+            avatar: p['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${p['id']}',
+            kelas: studentMatch?.kelas,
+            nipNis: role == UserRole.siswa ? studentMatch?.nis : (role == UserRole.guru ? teacherMatch?.nip : null),
+            position: studentMatch?.position,
+          ));
+        }
+        _accounts = loadedAccounts;
+        debugPrint("AppProvider: Loaded ${_accounts.length} accounts.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching accounts: $e");
+      }
 
       // Fallback: Make sure there's at least one admin account
       if (!_accounts.any((a) => a.role == UserRole.admin)) {
@@ -800,6 +837,7 @@ class AppProvider with ChangeNotifier {
 
       // 7. Fetch Attendance
       try {
+        debugPrint("AppProvider: Fetching attendance...");
         final dbAttendance = await supabase.from('attendance').select('*, subjects(name)');
         _attendance = dbAttendance.map<Attendance>((a) {
           final subject = a['subjects'] as Map?;
@@ -810,10 +848,10 @@ class AppProvider with ChangeNotifier {
             orElse: () => AttendanceStatus.hadir,
           );
 
-          // marked_by column doesn't exist, marked_by_role does
           final markedBy = a.containsKey('marked_by') ? (a['marked_by'] as String? ?? '') : '';
           final markedByRole = a['marked_by_role'] as String? ?? 'admin';
           String markedByName = 'System';
+          
           if (markedBy.isNotEmpty) {
             final accs = _accounts.where((acc) => acc.id == markedBy || acc.nipNis == markedBy).toList();
             if (accs.isNotEmpty) {
@@ -845,16 +883,18 @@ class AppProvider with ChangeNotifier {
             notes: a.containsKey('notes') ? a['notes'] as String? : null,
           );
         }).toList();
+        debugPrint("AppProvider: Fetched ${_attendance.length} attendance records.");
       } catch (e) {
-        debugPrint("Error fetching attendance: $e");
+        debugPrint("AppProvider error fetching attendance: $e");
         _attendance = [];
       }
 
     } catch (e) {
-      debugPrint("Error fetching Supabase data: $e");
+      debugPrint("AppProvider: CRITICAL Error during Supabase fetch: $e");
     } finally {
       _isFetching = false;
       notifyListeners();
+      debugPrint("AppProvider: Fetching process complete.");
     }
   }
   
