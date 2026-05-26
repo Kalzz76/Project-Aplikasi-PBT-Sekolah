@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../core/responsive.dart';
 import '../../providers/app_provider.dart';
 import '../../models/schedule.dart';
+import '../../models/school_class.dart';
+import '../../models/subject.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_badge.dart';
 import '../../widgets/app_avatar.dart';
+import '../../models/teacher.dart';
 
 class DashboardSiswa extends StatefulWidget {
   const DashboardSiswa({super.key});
@@ -78,8 +82,8 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
       return idxA.compareTo(idxB);
     });
 
-    final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel);
-    final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel);
+    final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00:00 - 00:00'));
+    final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00:00 - 00:00'));
     
     final startTime = firstSlot.timeRange.split(' - ')[0];
     final endTime = lastSlot.timeRange.split(' - ')[1];
@@ -111,7 +115,12 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
     final isSecretary = user.position?.contains('Sekretaris') ?? false;
 
     // Filter schedules for the student's class
-    final classId = provider.classes.firstWhere((c) => c.name == user.kelas, orElse: () => provider.classes[0]).id;
+    final classId = provider.classes.isEmpty
+        ? ''
+        : provider.classes.firstWhere(
+            (c) => c.name == user.kelas,
+            orElse: () => provider.classes.first,
+          ).id;
     final allClassSchedules = provider.schedules.where((s) => s.classId == classId).toList();
     final today = provider.currentDayName;
     final todaySchedules = allClassSchedules.where((s) => s.day == today).toList();
@@ -183,42 +192,51 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
   }
 
   Widget _buildStudentBanner(user) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF0F766E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: const Color(0xFF0F766E).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Halo, ${user.name}!', style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text('${user.kelas} • ${user.position}', style: const TextStyle(color: Color(0xFFD1FAE5), fontSize: 18)),
-              ],
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = Responsive.isMobileConstraint(constraints);
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(isMobile ? 20 : 32),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF059669), Color(0xFF0F766E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [BoxShadow(color: const Color(0xFF0F766E).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
           ),
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white24, width: 4),
-            ),
-            child: AppAvatar(
-              radius: 40, 
-              imageUrl: user.avatar,
-              name: user.name,
-              fontSize: 32,
-              textColor: const Color(0xFF0F766E),
-              backgroundColor: Colors.white,
-            ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Halo, ${user.name}!',
+                      style: TextStyle(color: Colors.white, fontSize: isMobile ? 22 : 32, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Text('${user.kelas} • ${user.position}', style: TextStyle(color: const Color(0xFFD1FAE5), fontSize: isMobile ? 14 : 18)),
+                  ],
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24, width: 4),
+                ),
+                child: AppAvatar(
+                  radius: isMobile ? 28 : 40,
+                  imageUrl: user.avatar,
+                  name: user.name,
+                  fontSize: isMobile ? 22 : 32,
+                  textColor: const Color(0xFF0F766E),
+                  backgroundColor: Colors.white,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -232,11 +250,18 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
         if (group.isEvent) return _buildEventRow(group, isDark);
         
         final entry = group.entries.first;
-        final teacher = provider.teachers.firstWhere((t) => t.id == entry.teacherId, orElse: () => provider.teachers[0]);
-        final subject = provider.subjects.firstWhere((s) => s.id == entry.subjectId || s.name == entry.subjectId, orElse: () => provider.subjects[0]);
+        final teacher = provider.teachers.isNotEmpty 
+            ? provider.teachers.firstWhere((t) => t.id == entry.teacherId, orElse: () => provider.teachers[0])
+            : Teacher(id: '', nip: '', name: 'N/A', position: '', subjects: [], avatar: '');
+        final subject = provider.subjects.isNotEmpty
+            ? provider.subjects.firstWhere((s) => s.id == entry.subjectId || s.name == entry.subjectId, orElse: () => provider.subjects[0])
+            : Subject(id: '', name: 'N/A', teacherIds: []);
         
         // Check if attendance already marked
-        final cls = provider.classes.firstWhere((c) => c.id == entry.classId);
+        final cls = provider.classes.firstWhere(
+          (c) => c.id == entry.classId,
+          orElse: () => SchoolClass(id: entry.classId, name: entry.classId, homeroomTeacherId: '', homeroomTeacherName: '', roomName: '-', totalStudents: 0),
+        );
         final isMarked = provider.getTodayAttendanceForSession(classId: entry.classId, subjectName: subject.name).isNotEmpty;
         final siswaBlocked = provider.isAttendanceFilledByTeacher(entry.classId, subject.name);
         final isOngoing = provider.isScheduleGroupActive(group.entries, provider.currentDayName);
@@ -433,7 +458,7 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     child: Row(
                       children: [
                         Container(width: 90, child: Text(group.timeRange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)))),
-                        Expanded(child: Text(group.isEvent ? (s.customTitle ?? 'Kegiatan') : provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId).name, style: TextStyle(color: AppColors.getTextColor(isDark)))),
+                        Expanded(child: Text(group.isEvent ? (s.customTitle ?? 'Kegiatan') : provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId, orElse: () => Subject(id: '', name: s.subjectId ?? '?', teacherIds: [])).name, style: TextStyle(color: AppColors.getTextColor(isDark)))),
                         if (!group.isEvent) Text(s.roomId ?? 'R.?', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textMuted)),
                       ],
                     ),

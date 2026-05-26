@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../core/responsive.dart';
 import '../../models/user.dart';
 import '../../models/schedule.dart';
 import '../../models/school_class.dart';
@@ -95,8 +96,8 @@ class _DashboardGuruState extends State<DashboardGuru> {
       return idxA.compareTo(idxB);
     });
 
-    final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel);
-    final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel);
+    final firstSlot = slots.firstWhere((s) => s.label == group.first.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00:00 - 00:00'));
+    final lastSlot = slots.firstWhere((s) => s.label == group.last.slotLabel, orElse: () => TimeSlot(label: '', timeRange: '00:00 - 00:00'));
     
     final startTime = firstSlot.timeRange.split(' - ')[0];
     final endTime = lastSlot.timeRange.split(' - ')[1];
@@ -208,28 +209,39 @@ class _DashboardGuruState extends State<DashboardGuru> {
   }
 
   Widget _buildGreetingBanner(String name) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFF4F46E5), Color(0xFF3730A3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: const Color(0xFF3730A3).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = Responsive.isMobileConstraint(constraints);
+        return Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(isMobile ? 20 : 32),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFF4F46E5), Color(0xFF3730A3)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [BoxShadow(color: const Color(0xFF3730A3).withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(LucideIcons.sun, color: Colors.amber, size: 28),
-              const SizedBox(width: 12),
-              Text('Selamat Pagi, $name!', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+              Row(
+                children: [
+                  const Icon(LucideIcons.sun, color: Colors.amber, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Selamat Pagi, $name!',
+                      style: TextStyle(color: Colors.white, fontSize: isMobile ? 20 : 28, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text('Tetap semangat mengajar demi masa depan bangsa.', style: TextStyle(color: Color(0xFFDBEAFE), fontSize: 14)),
             ],
           ),
-          const SizedBox(height: 8),
-          const Text('Tetap semangat mengajar demi masa depan bangsa. Jadwal Anda sudah siap.', style: TextStyle(color: Color(0xFFDBEAFE), fontSize: 16)),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -630,8 +642,8 @@ class _DashboardGuruState extends State<DashboardGuru> {
                       ),
                     );
                   }
-                  final cls = provider.classes.firstWhere((c) => c.id == s.classId || c.name == s.classId);
-                  final sub = provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId);
+                  final cls = provider.classes.firstWhere((c) => c.id == s.classId || c.name == s.classId, orElse: () => SchoolClass(id: s.classId, name: s.classId, homeroomTeacherId: '', homeroomTeacherName: '', roomName: '-', totalStudents: 0));
+                  final sub = provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId, orElse: () => Subject(id: s.subjectId ?? '', name: s.subjectId ?? '?', teacherIds: []));
                   
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),

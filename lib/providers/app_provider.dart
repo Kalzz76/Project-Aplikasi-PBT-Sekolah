@@ -687,7 +687,7 @@ class AppProvider with ChangeNotifier {
             name: profile?['name'] as String? ?? 'No Name',
             position: 'Guru Tetap',
             subjects: subjectsList,
-            avatar: profile?['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${t['id']}',
+            avatar: profile?['avatar_url'] as String? ?? '',
           );
         }).toList();
         debugPrint("AppProvider: Fetched ${_teachers.length} teachers.");
@@ -709,14 +709,21 @@ class AppProvider with ChangeNotifier {
       // 3. Fetch Classes
       try {
         debugPrint("AppProvider: Fetching classes...");
-        final dbClasses = await supabase.from('classes').select('*, profiles(name)');
+        final dbClasses = await supabase.from('classes').select('*');
         _classes = dbClasses.map<SchoolClass>((c) {
-          final teacherProfile = c['profiles'] as Map?;
+          final teacherId = c['homeroom_teacher_id'] as String? ?? '';
+          String teacherName = 'Belum diatur';
+          
+          if (teacherId.isNotEmpty) {
+             final t = _teachers.cast<Teacher?>().firstWhere((t) => t!.id == teacherId, orElse: () => null);
+             if (t != null) teacherName = t.name;
+          }
+
           return SchoolClass(
             id: c['id'] as String,
             name: c['name'] as String,
-            homeroomTeacherId: c['homeroom_teacher_id'] as String? ?? '',
-            homeroomTeacherName: teacherProfile?['name'] as String? ?? 'Belum diatur',
+            homeroomTeacherId: teacherId,
+            homeroomTeacherName: teacherName,
             roomName: c['room_name'] as String? ?? '-',
             totalStudents: 0,
           );
@@ -818,7 +825,7 @@ class AppProvider with ChangeNotifier {
             username: p['username'] as String? ?? '',
             password: role == UserRole.admin ? 'password' : (role == UserRole.guru ? 'guru123' : 'siswa123'),
             role: role,
-            avatar: p['avatar_url'] as String? ?? 'https://i.pravatar.cc/150?u=${p['id']}',
+            avatar: p['avatar_url'] as String? ?? '',
             kelas: studentMatch?.kelas,
             nipNis: role == UserRole.siswa ? studentMatch?.nis : (role == UserRole.guru ? teacherMatch?.nip : null),
             position: studentMatch?.position,
@@ -1163,7 +1170,7 @@ class AppProvider with ChangeNotifier {
             username: username,
             password: _accounts[index].password,
             role: UserRole.siswa,
-            avatar: 'https://i.pravatar.cc/150?u=${student.id}',
+            avatar: '',
             kelas: student.kelas,
             nipNis: student.nis,
             position: student.position,
@@ -1175,7 +1182,7 @@ class AppProvider with ChangeNotifier {
             username: username,
             password: 'siswa123',
             role: UserRole.siswa,
-            avatar: 'https://i.pravatar.cc/150?u=${student.id}',
+            avatar: '',
             kelas: student.kelas,
             nipNis: student.nis,
             position: student.position,

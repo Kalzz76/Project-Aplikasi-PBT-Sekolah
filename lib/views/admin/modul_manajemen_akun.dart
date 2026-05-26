@@ -171,7 +171,7 @@ class _ModulManajemenAkunState extends State<ModulManajemenAkun> {
                             username: usernameController.text,
                             password: passwordController.text,
                             role: selectedRole,
-                            avatar: 'https://i.pravatar.cc/150?u=${usernameController.text}',
+                            avatar: '',
                           );
                           
                           provider.addAccount(newAccount);

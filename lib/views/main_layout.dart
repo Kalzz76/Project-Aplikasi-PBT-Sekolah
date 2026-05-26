@@ -5,7 +5,7 @@ import '../models/user.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/header.dart';
 import '../core/app_colors.dart';
-import 'login_view.dart';
+import '../core/responsive.dart';
 import 'profile_view.dart';
 import 'admin/modul_manajemen_akun.dart';
 import 'admin/dashboard_admin.dart';
@@ -28,48 +28,71 @@ class MainLayout extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<AppProvider>(context);
+    final isMobile = Responsive.isMobile(context);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent, // Background will be drawn by body
-      body: Container(
-        decoration: provider.isDarkMode 
-          ? const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0F172A), // Deep Slate
-                  Color(0xFF1E1B4B), // Deep Indigo
-                  Color(0xFF020617), // Black Slate
-                ],
+    final bodyDecoration = provider.isDarkMode
+        ? const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF0F172A),
+                Color(0xFF1E1B4B),
+                Color(0xFF020617),
+              ],
+            ),
+          )
+        : const BoxDecoration(color: AppColors.background);
+
+    final contentArea = Expanded(
+      child: Column(
+        children: [
+          Header(showMenuButton: isMobile),
+          Expanded(
+            child: Container(
+              color: provider.isDarkMode ? Colors.transparent : AppColors.background,
+              child: SingleChildScrollView(
+                padding: Responsive.contentPadding(context),
+                child: Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 1600),
+                    child: _buildContent(context),
+                  ),
+                ),
               ),
-            )
-          : const BoxDecoration(color: AppColors.background),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (isMobile) {
+      // Mobile: Drawer-based layout
+      return Scaffold(
+        backgroundColor: Colors.transparent,
+        drawer: Drawer(
+          width: 260,
+          backgroundColor: Colors.transparent,
+          child: const Sidebar(),
+        ),
+        body: Container(
+          decoration: bodyDecoration,
+          child: Row(
+            children: [contentArea],
+          ),
+        ),
+      );
+    }
+
+    // Desktop: Sidebar selalu tampil di kiri
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Container(
+        decoration: bodyDecoration,
         child: Row(
           children: [
             const Sidebar(),
-            Expanded(
-              child: Column(
-                children: [
-                  const Header(),
-                  Expanded(
-                    child: Container(
-                      // Transparan di dark mode agar background gradient terlihat, solid di light mode
-                      color: provider.isDarkMode ? Colors.transparent : AppColors.background,
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(32),
-                        child: Center(
-                          child: Container(
-                            constraints: const BoxConstraints(maxWidth: 1600),
-                            child: _buildContent(context),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            contentArea,
           ],
         ),
       ),
@@ -81,7 +104,6 @@ class MainLayout extends StatelessWidget {
     final role = provider.currentUser.role;
     final activeMenu = provider.activeMenu;
 
-    // Global modules (accessible by all roles if menu is set)
     if (activeMenu == 'profile') {
       return const ProfileView();
     }

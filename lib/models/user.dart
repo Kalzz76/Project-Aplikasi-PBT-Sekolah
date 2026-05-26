@@ -18,7 +18,7 @@ class UserProfile {
     required this.username,
     required this.password,
     required this.role,
-    this.avatar = 'https://i.pravatar.cc/150',
+    this.avatar = '',
     this.subject,
     this.kelas,
     this.nipNis,

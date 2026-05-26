@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../core/responsive.dart';
 import '../../providers/app_provider.dart';
 import '../../core/chronos_service.dart';
 import '../../widgets/custom_card.dart';
@@ -108,23 +109,43 @@ class DashboardAdmin extends StatelessWidget {
         ],
         
         // Header with dynamic greeting
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Ringkasan Dashboard', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode))),
-                Text('Pantau performa sekolah secara real-time hari ini.', style: TextStyle(fontSize: 14, color: provider.isDarkMode ? Colors.white70 : AppColors.textSecondary)),
-              ],
-            ),
-            CustomButton(
-              variant: ButtonVariant.primary,
-              icon: const Icon(LucideIcons.database, size: 18),
-              onClick: () => _handleSync(context, provider),
-              child: const Text('Sinkronisasi Supabase'),
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isMobile = Responsive.isMobileConstraint(constraints);
+            return isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Ringkasan Dashboard', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode))),
+                      Text('Pantau performa sekolah secara real-time hari ini.', style: TextStyle(fontSize: 13, color: provider.isDarkMode ? Colors.white70 : AppColors.textSecondary)),
+                      const SizedBox(height: 12),
+                      CustomButton(
+                        variant: ButtonVariant.primary,
+                        icon: const Icon(LucideIcons.database, size: 18),
+                        onClick: () => _handleSync(context, provider),
+                        child: const Text('Sinkronisasi Supabase'),
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Ringkasan Dashboard', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode))),
+                          Text('Pantau performa sekolah secara real-time hari ini.', style: TextStyle(fontSize: 14, color: provider.isDarkMode ? Colors.white70 : AppColors.textSecondary)),
+                        ],
+                      ),
+                      CustomButton(
+                        variant: ButtonVariant.primary,
+                        icon: const Icon(LucideIcons.database, size: 18),
+                        onClick: () => _handleSync(context, provider),
+                        child: const Text('Sinkronisasi Supabase'),
+                      ),
+                    ],
+                  );
+          },
         ),
         const SizedBox(height: 32),
 
@@ -210,6 +231,7 @@ class DashboardAdmin extends StatelessWidget {
 
   Widget _buildQuickActions(BuildContext context) {
     final provider = Provider.of<AppProvider>(context, listen: false);
+    final isMobile = Responsive.isMobile(context);
     final actions = [
       {'id': 'siswa', 'label': 'Siswa', 'icon': LucideIcons.users, 'color': Colors.indigo},
       {'id': 'jadwal', 'label': 'Jadwal', 'icon': LucideIcons.calendar, 'color': Colors.blue},
@@ -218,6 +240,25 @@ class DashboardAdmin extends StatelessWidget {
       {'id': 'ruangan', 'label': 'Ruangan', 'icon': LucideIcons.building, 'color': Colors.purple},
       {'id': 'accounts', 'label': 'Akun', 'icon': LucideIcons.userPlus, 'color': AppColors.danger},
     ];
+
+    if (isMobile) {
+      return GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.1,
+        children: actions.map((action) {
+          final color = action['color'] as Color;
+          return _QuickActionCard(
+            action: action,
+            color: color,
+            onTap: () => provider.setActiveMenu(action['id'] as String),
+          );
+        }).toList(),
+      );
+    }
 
     return Row(
       children: actions.map((action) {
@@ -244,7 +285,6 @@ class DashboardAdmin extends StatelessWidget {
     final totalEntries = todayAttendance.length;
     final presenceRate = totalEntries > 0 ? (hadirEntries / totalEntries * 100).toStringAsFixed(1) : '0';
 
-    // Mocking a thousands separator for the "real" feel if needed, but here we just show the actual count
     String formatNum(int num) => num.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
 
     final stats = [
@@ -254,48 +294,91 @@ class DashboardAdmin extends StatelessWidget {
       {'title': 'Kehadiran Hari Ini', 'value': '$presenceRate%', 'icon': LucideIcons.circleCheck, 'color': AppColors.info},
     ];
 
-    return Row(
-      children: stats.map((stat) {
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: stat == stats.last ? 0 : 20),
-            child: CustomCard(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = Responsive.isMobileConstraint(constraints);
+        if (isMobile) {
+          return GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.6,
+            children: stats.map((stat) => CustomCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
+                  Row(
+                    children: [
+                      Icon(stat['icon'] as IconData, color: stat['color'] as Color, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
                           stat['title'] as String,
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          stat['value'] as String,
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE2E8F0)),
-                    ),
-                    child: Icon(stat['icon'] as IconData, color: stat['color'] as Color, size: 22),
+                  const SizedBox(height: 8),
+                  Text(
+                    stat['value'] as String,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)),
                   ),
                 ],
               ),
-            ),
-          ),
+            )).toList(),
+          );
+        }
+
+        return Row(
+          children: stats.map((stat) {
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: stat == stats.last ? 0 : 20),
+                child: CustomCard(
+                  padding: const EdgeInsets.all(24),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              stat['title'] as String,
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : const Color(0xFF64748B)),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              stat['value'] as String,
+                              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE2E8F0)),
+                        ),
+                        child: Icon(stat['icon'] as IconData, color: stat['color'] as Color, size: 22),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         );
-      }).toList(),
+      },
     );
   }
 

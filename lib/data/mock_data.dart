@@ -14,7 +14,7 @@ class MockData {
       username: 'admin',
       password: 'password',
       role: UserRole.admin,
-      avatar: 'https://i.pravatar.cc/150?u=admin',
+      avatar: '',
     ),
     'ela2005': UserProfile(
       id: 'G01',
@@ -23,7 +23,7 @@ class MockData {
       password: 'guru123',
       role: UserRole.guru,
       subject: 'Sejarah',
-      avatar: 'https://i.pravatar.cc/150?u=ela',
+      avatar: '',
       nipNis: '198205052012062005',
     ),
     'sekretaris1': UserProfile(
@@ -32,7 +32,7 @@ class MockData {
       username: 'sekretaris1',
       password: 'siswa123',
       role: UserRole.siswa,
-      avatar: 'https://i.pravatar.cc/150?u=sekretaris',
+      avatar: '',
       kelas: 'XI RPL 1',
       nipNis: '100005',
       position: 'Sekretaris 1',
@@ -42,20 +42,20 @@ class MockData {
   static final List<Student> students = [];
 
   static final List<Teacher> teachers = [
-    Teacher(id: 'G01', nip: '198205052012062005', name: 'Ela Nurlaila, S.Pd', position: 'Guru Tetap', subjects: ['Sejarah', 'Ppan'], avatar: 'https://i.pravatar.cc/150?u=ela'),
-    Teacher(id: 'G02', nip: '197806062008071006', name: 'Rukmana, S.Pd.I', position: 'Guru Tetap', subjects: ['PABP'], avatar: 'https://i.pravatar.cc/150?u=rukmana'),
-    Teacher(id: 'G03', nip: '199207072018082007', name: 'Pratiwi, S.Si', position: 'Guru Tetap', subjects: ['Basis Data', 'CLOUD'], avatar: 'https://i.pravatar.cc/150?u=pratiwi'),
-    Teacher(id: 'G04', nip: '198808082014091008', name: 'Jaya Sumpena, S.ST, M.Kom', position: 'Guru Tetap', subjects: ['PPB'], avatar: 'https://i.pravatar.cc/150?u=jaya'),
-    Teacher(id: 'G05', nip: '198409092011102009', name: 'Meli Novita, S.Pd', position: 'Guru Tetap', subjects: ['Bahasa Indonesia'], avatar: 'https://i.pravatar.cc/150?u=meli'),
-    Teacher(id: 'G06', nip: '198110102009112010', name: 'Indira Sari Paputungan, M.Ed', position: 'Guru Tetap', subjects: ['Bahasa Inggris'], avatar: 'https://i.pravatar.cc/150?u=indira'),
-    Teacher(id: 'G07', nip: '199511112020121011', name: 'Maspuri Andewi, S.Kom', position: 'Guru Tetap', subjects: ['PBT Pemrograman Berbasis Teks'], avatar: 'https://i.pravatar.cc/150?u=maspuri'),
-    Teacher(id: 'G08', nip: '198712122016012012', name: 'Annisa Intikarusdiansari, S.Pd', position: 'Guru Tetap', subjects: ['PKK'], avatar: 'https://i.pravatar.cc/150?u=annisa'),
-    Teacher(id: 'G09', nip: '198301012013021013', name: 'Taufik Hidayat, M.M.Pd', position: 'Guru Tetap', subjects: ['PJOK'], avatar: 'https://i.pravatar.cc/150?u=taufik'),
-    Teacher(id: 'G10', nip: '198902022017032014', name: 'Desta Mulyanti, S.Sn', position: 'Guru Tetap', subjects: ['Bahasa Sunda'], avatar: 'https://i.pravatar.cc/150?u=desta'),
-    Teacher(id: 'G11', nip: '197603032002042015', name: 'Hazar Nurbani, M.Pd', position: 'Guru Tetap', subjects: ['BPBK'], avatar: 'https://i.pravatar.cc/150?u=hazar'),
-    Teacher(id: 'G12', nip: '198004042006052016', name: 'Nofa Nirawati, S.Pd, M.T', position: 'Guru Tetap', subjects: ['Matematika'], avatar: 'https://i.pravatar.cc/150?u=nofa'),
-    Teacher(id: 'G13', nip: '198605052015061017', name: 'Dena Handriana, M.Pd', position: 'Guru Tetap', subjects: ['STA'], avatar: 'https://i.pravatar.cc/150?u=dena'),
-    Teacher(id: 'G14', nip: '199106062019071018', name: 'Ariantonius Sagala, S.Kom', position: 'Guru Tetap', subjects: ['PWP'], avatar: 'https://i.pravatar.cc/150?u=sagala'),
+    Teacher(id: 'G01', nip: '198205052012062005', name: 'Ela Nurlaila, S.Pd', position: 'Guru Tetap', subjects: ['Sejarah', 'Ppan'], avatar: ''),
+    Teacher(id: 'G02', nip: '197806062008071006', name: 'Rukmana, S.Pd.I', position: 'Guru Tetap', subjects: ['PABP'], avatar: ''),
+    Teacher(id: 'G03', nip: '199207072018082007', name: 'Pratiwi, S.Si', position: 'Guru Tetap', subjects: ['Basis Data', 'CLOUD'], avatar: ''),
+    Teacher(id: 'G04', nip: '198808082014091008', name: 'Jaya Sumpena, S.ST, M.Kom', position: 'Guru Tetap', subjects: ['PPB'], avatar: ''),
+    Teacher(id: 'G05', nip: '198409092011102009', name: 'Meli Novita, S.Pd', position: 'Guru Tetap', subjects: ['Bahasa Indonesia'], avatar: ''),
+    Teacher(id: 'G06', nip: '198110102009112010', name: 'Indira Sari Paputungan, M.Ed', position: 'Guru Tetap', subjects: ['Bahasa Inggris'], avatar: ''),
+    Teacher(id: 'G07', nip: '199511112020121011', name: 'Maspuri Andewi, S.Kom', position: 'Guru Tetap', subjects: ['PBT Pemrograman Berbasis Teks'], avatar: ''),
+    Teacher(id: 'G08', nip: '198712122016012012', name: 'Annisa Intikarusdiansari, S.Pd', position: 'Guru Tetap', subjects: ['PKK'], avatar: ''),
+    Teacher(id: 'G09', nip: '198301012013021013', name: 'Taufik Hidayat, M.M.Pd', position: 'Guru Tetap', subjects: ['PJOK'], avatar: ''),
+    Teacher(id: 'G10', nip: '198902022017032014', name: 'Desta Mulyanti, S.Sn', position: 'Guru Tetap', subjects: ['Bahasa Sunda'], avatar: ''),
+    Teacher(id: 'G11', nip: '197603032002042015', name: 'Hazar Nurbani, M.Pd', position: 'Guru Tetap', subjects: ['BPBK'], avatar: ''),
+    Teacher(id: 'G12', nip: '198004042006052016', name: 'Nofa Nirawati, S.Pd, M.T', position: 'Guru Tetap', subjects: ['Matematika'], avatar: ''),
+    Teacher(id: 'G13', nip: '198605052015061017', name: 'Dena Handriana, M.Pd', position: 'Guru Tetap', subjects: ['STA'], avatar: ''),
+    Teacher(id: 'G14', nip: '199106062019071018', name: 'Ariantonius Sagala, S.Kom', position: 'Guru Tetap', subjects: ['PWP'], avatar: ''),
   ];
 
   static final List<Subject> subjects = [

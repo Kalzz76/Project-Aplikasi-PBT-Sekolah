@@ -54,7 +54,7 @@ class _CustomCardState extends State<CustomCard> {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
         transform: canHover && _isHovered 
-            ? (Matrix4.identity()..translate(0, -4.0, 0)) 
+            ? (Matrix4.identity()..translate(0.0, -4.0, 0.0)) 
             : Matrix4.identity(),
         decoration: BoxDecoration(
           color: widget.color ?? AppColors.getCardColor(isDark).withOpacity(isDark ? 0.05 : 1.0),

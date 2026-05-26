@@ -21,7 +21,7 @@ class AppAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    final bool hasImage = imageUrl != null && imageUrl!.isNotEmpty && !imageUrl!.contains('pravatar.cc');
     final String initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final Color bg = backgroundColor ?? AppColors.primary.withOpacity(0.1);
     final Color textCol = textColor ?? AppColors.primary;

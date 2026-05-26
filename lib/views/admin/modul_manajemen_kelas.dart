@@ -143,7 +143,7 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
             ElevatedButton(
               onPressed: () {
-                final teacherObj = teachers.firstWhere((t) => t.name == selectedTeacher, orElse: () => teachers[0]);
+                final teacherObj = teachers.firstWhere((t) => t.name == selectedTeacher, orElse: () => teachers.isNotEmpty ? teachers[0] : Teacher(id: '', nip: '', name: 'N/A', position: '', subjects: [], avatar: ''));
                 final isTeacherBusy = provider.classes.any((c) => c.homeroomTeacherId == teacherObj.id && c.id != cls.id);
                 if (isTeacherBusy) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -287,7 +287,7 @@ class _ModulManajemenKelasState extends State<ModulManajemenKelas> with SingleTi
                   return;
                 }
 
-                final teacherObj = teachers.firstWhere((t) => t.name == selectedTeacher, orElse: () => teachers[0]);
+                final teacherObj = teachers.firstWhere((t) => t.name == selectedTeacher, orElse: () => teachers.isNotEmpty ? teachers[0] : Teacher(id: '', nip: '', name: 'N/A', position: '', subjects: [], avatar: ''));
                 final newClass = SchoolClass(
                   id: isEdit ? cls.id : AppProvider.generateNewUuid(),
                   name: nameController.text,
