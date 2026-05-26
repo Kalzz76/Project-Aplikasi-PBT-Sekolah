@@ -57,7 +57,7 @@ class _CustomCardState extends State<CustomCard> {
             ? (Matrix4.identity()..translate(0, -4.0, 0)) 
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          color: widget.color ?? (isDark ? Colors.white.withOpacity(0.05) : AppColors.getCardColor(false)),
+          color: widget.color ?? AppColors.getCardColor(isDark).withOpacity(isDark ? 0.05 : 1.0),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: canHover && _isHovered 
@@ -75,15 +75,7 @@ class _CustomCardState extends State<CustomCard> {
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: isDark && widget.color == null
-              ? BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-                  child: innerContent,
-                )
-              : innerContent,
-        ),
+          child: innerContent,
       ),
     );
   }
