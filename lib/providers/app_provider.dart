@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/school_schedule_utils.dart';
 import '../core/chronos_service.dart';
 import '../models/user.dart';
@@ -9,6 +11,7 @@ import '../models/school_class.dart';
 import '../models/subject.dart';
 import '../models/room.dart';
 import '../models/attendance.dart';
+import '../models/teacher_attendance.dart';
 import '../models/schedule.dart';
 import '../models/import_student_row.dart';
 import '../models/attendance_export_row.dart';
@@ -22,6 +25,26 @@ class ResetRequest {
   bool isProcessed;
 
   ResetRequest({required this.id, required this.email, required this.timestamp, this.isProcessed = false});
+}
+
+class AppNotification {
+  final String id;
+  final String title;
+  final String message;
+  final String userId; // Target user
+  final DateTime timestamp;
+  final String type; // 'validation_success', 'validation_rejected', etc.
+  bool isRead;
+
+  AppNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.userId,
+    required this.timestamp,
+    this.type = 'general',
+    this.isRead = false,
+  });
 }
 
 class CallNotification {
@@ -81,6 +104,33 @@ const kOrgStructureRoles = [
 class AppProvider with ChangeNotifier {
   AppProvider() {
     fetchEverything();
+    checkSavedAuth();
+    _initChronosTicker();
+  }
+
+  Timer? _chronosTimer;
+  void _initChronosTicker() {
+    _chronosTimer?.cancel();
+    _chronosTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (chronosEnabled) {
+        ChronosService.instance.tick();
+      }
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _chronosTimer?.cancel();
+    super.dispose();
+  }
+
+  bool _rememberMe = false;
+  bool get rememberMe => _rememberMe;
+
+  void setRememberMe(bool value) {
+    _rememberMe = value;
+    notifyListeners();
   }
 
   bool _isFetching = false;
@@ -94,21 +144,64 @@ class AppProvider with ChangeNotifier {
 
   // --- Chronos ---
   bool get chronosEnabled => ChronosService.instance.enabled;
+  DateTime get chronosDate => ChronosService.instance.simulatedDate;
   int get chronosDay => ChronosService.instance.dayOfWeek;
   int get chronosHour => ChronosService.instance.hour;
   int get chronosMinute => ChronosService.instance.minute;
+  int get chronosSecond => ChronosService.instance.second;
   String get chronosDayName => ChronosService.instance.dayName;
 
   void setChronosEnabled(bool v) { ChronosService.instance.setEnabled(v); notifyListeners(); }
   void setChronosDay(int d) { ChronosService.instance.setDay(d); notifyListeners(); }
   void setChronosHour(int h) { ChronosService.instance.setHour(h); notifyListeners(); }
   void setChronosMinute(int m) { ChronosService.instance.setMinute(m); notifyListeners(); }
+  void setChronosDate(DateTime date) { ChronosService.instance.setDate(date); notifyListeners(); }
 
   /// Waktu sistem (gunakan ini untuk semua fitur jadwal/absensi)
   DateTime systemNow() => ChronosService.instance.now();
   
   List<CallNotification> _calls = [];
   List<CallNotification> get calls => _calls;
+
+  List<AppNotification> _notifications = [];
+  List<AppNotification> get notifications => _notifications;
+
+  List<AppNotification> getNotificationsForUser(String userId) =>
+      _notifications.where((n) => n.userId == userId).toList()
+        ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+  void addNotification({
+    required String userId,
+    required String title,
+    required String message,
+    required String type,
+  }) {
+    _notifications.insert(
+      0,
+      AppNotification(
+        id: 'not_${DateTime.now().millisecondsSinceEpoch}',
+        title: title,
+        message: message,
+        userId: userId,
+        timestamp: DateTime.now(),
+        type: type,
+      ),
+    );
+    notifyListeners();
+  }
+
+  void markNotificationAsRead(String notificationId) {
+    final idx = _notifications.indexWhere((n) => n.id == notificationId);
+    if (idx != -1) {
+      _notifications[idx].isRead = true;
+      notifyListeners();
+    }
+  }
+
+  void clearNotifications(String userId) {
+    _notifications.removeWhere((n) => n.userId == userId);
+    notifyListeners();
+  }
 
   List<CallNotification> _callHistory = [];
   List<CallNotification> get callHistory => _callHistory;
@@ -594,9 +687,32 @@ class AppProvider with ChangeNotifier {
   // Attendance Session State
   SchoolClass? _selectedClassForAttendance;
   Subject? _selectedSubjectForAttendance;
+  ScheduleEntry? _currentSessionSchedule;
+  String _currentSessionSlot = '';
   
   SchoolClass? get selectedClassForAttendance => _selectedClassForAttendance;
   Subject? get selectedSubjectForAttendance => _selectedSubjectForAttendance;
+  String get activeSlotLabel => _currentSessionSlot;
+  ScheduleEntry? get currentSessionSchedule => _currentSessionSchedule;
+
+  void setActiveScheduleForSession(ScheduleEntry? entry) {
+    _currentSessionSchedule = entry;
+  }
+
+  void setActiveSlotLabel(String label) {
+    _currentSessionSlot = label;
+    notifyListeners();
+  }
+
+  void setSelectedClassForAttendance(SchoolClass? cls) {
+    _selectedClassForAttendance = cls;
+    notifyListeners();
+  }
+
+  void setSelectedSubjectForAttendance(Subject? sub) {
+    _selectedSubjectForAttendance = sub;
+    notifyListeners();
+  }
 
   void startAttendanceSession(SchoolClass cls, Subject sub, {bool forceSecretary = false}) {
     if (!forceSecretary &&
@@ -637,9 +753,12 @@ class AppProvider with ChangeNotifier {
   List<ScheduleEntry> _schedules = [];
   // Accounts Data
   List<UserProfile> _accounts = [];
+  // Teacher Attendance Data
+  List<TeacherAttendance> _teacherAttendance = [];
+  List<TeacherAttendance> get teacherAttendance => _teacherAttendance;
   // Reset Requests
   List<ResetRequest> _resetRequests = [];
-
+  
   Future<void> fetchEverything() async {
     _isFetching = true;
     notifyListeners();
@@ -881,6 +1000,7 @@ class AppProvider with ChangeNotifier {
             studentId: a['student_id'] as String,
             classId: a['class_id'] as String,
             subjectId: subject?['name'] as String? ?? '',
+            slotLabel: a['slot_label'] as String? ?? '',
             date: DateTime.parse(a['date'] as String).toLocal(),
             status: status,
             markedBy: markedBy,
@@ -888,6 +1008,15 @@ class AppProvider with ChangeNotifier {
             markedByName: markedByName,
             reason: a['reason'] as String?,
             notes: a.containsKey('notes') ? a['notes'] as String? : null,
+            validationStatus: () {
+              final vs = a['validation_status'] as String? ?? 'pending';
+              switch (vs) {
+                case 'validated': return ValidationStatus.validated;
+                case 'rejected': return ValidationStatus.rejected;
+                default: return ValidationStatus.pending;
+              }
+            }(),
+            validatedBy: a['validated_by'] as String?,
           );
         }).toList();
         debugPrint("AppProvider: Fetched ${_attendance.length} attendance records.");
@@ -896,30 +1025,70 @@ class AppProvider with ChangeNotifier {
         _attendance = [];
       }
 
+      // 8. Fetch Teacher Attendance
+      try {
+        debugPrint("AppProvider: Fetching teacher attendance...");
+        final dbTeacherAtt = await supabase.from('teacher_attendance').select();
+        _teacherAttendance = dbTeacherAtt.map<TeacherAttendance>((ta) {
+          final statusStr = ta['status'] as String? ?? 'hadir';
+          final status = statusStr == 'hadir'
+              ? TeacherAttendanceStatus.hadir
+              : TeacherAttendanceStatus.tidakHadir;
+          return TeacherAttendance(
+            id: ta['id'] as String,
+            teacherId: ta['teacher_id'] as String,
+            classId: ta['class_id'] as String,
+            subjectId: ta['subject_id'] as String? ?? '',
+            slotLabel: ta['slot_label'] as String,
+            date: DateTime.parse(ta['date'] as String).toLocal(),
+            status: status,
+            reason: TeacherAttendance.reasonFromString(ta['reason'] as String?),
+            notes: ta['notes'] as String?,
+            amountOfLessons: ta['amount_of_lessons'] as int? ?? 1,
+            reportedBy: ta['reported_by'] as String? ?? '',
+          );
+        }).toList();
+        debugPrint("AppProvider: Fetched ${_teacherAttendance.length} teacher attendance records.");
+      } catch (e) {
+        debugPrint("AppProvider error fetching teacher attendance: $e");
+        _teacherAttendance = [];
+      }
+
     } catch (e) {
       debugPrint("AppProvider: CRITICAL Error during Supabase fetch: $e");
     } finally {
       _isFetching = false;
       notifyListeners();
       debugPrint("AppProvider: Fetching process complete.");
+      
+      // Auto-fix schedules with invalid teacher IDs
+      fixScheduleTeacherIds().then((count) {
+        if (count > 0) {
+          debugPrint("Auto-fixed $count schedules with invalid teacher IDs");
+        }
+      });
     }
   }
   
   List<ResetRequest> get resetRequests => _resetRequests.where((r) => !r.isProcessed).toList();
 
-  void requestPasswordReset(String email) {
+  void requestPasswordReset(String username) {
     _resetRequests.add(ResetRequest(
       id: DateTime.now().toString(),
-      email: email,
+      email: username,
       timestamp: DateTime.now(),
     ));
     notifyListeners();
   }
 
-  void processResetRequest(String id) {
+  void processResetRequest(String id, [String newPassword = '123456']) {
     final index = _resetRequests.indexWhere((r) => r.id == id);
     if (index != -1) {
       _resetRequests[index].isProcessed = true;
+      final accountIndex = _accounts.indexWhere((a) => a.username == _resetRequests[index].email);
+      if (accountIndex != -1) {
+        _accounts[accountIndex] = _accounts[accountIndex].copyWith(password: newPassword);
+      }
       notifyListeners();
     }
   }
@@ -1077,6 +1246,11 @@ class AppProvider with ChangeNotifier {
       _currentUser = account;
       _isLoggedIn = true;
       _activeMenu = 'dashboard';
+      if (_rememberMe) {
+        _saveAuth(cleanUsername, cleanPassword, requiredRole);
+      } else {
+        _clearAuth();
+      }
       notifyListeners();
       return true;
     } catch (e) {
@@ -1084,8 +1258,53 @@ class AppProvider with ChangeNotifier {
     }
   }
 
+  Future<void> _saveAuth(String username, String password, UserRole role) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('saved_username', username);
+    await prefs.setString('saved_password', password);
+    await prefs.setString('saved_role', role.name);
+    await prefs.setBool('remember_me', true);
+  }
+
+  Future<void> _clearAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('saved_username');
+    await prefs.remove('saved_password');
+    await prefs.remove('saved_role');
+    await prefs.setBool('remember_me', false);
+  }
+
+  Future<void> checkSavedAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    final remember = prefs.getBool('remember_me') ?? false;
+    if (!remember) return;
+
+    final user = prefs.getString('saved_username');
+    final pass = prefs.getString('saved_password');
+    final roleStr = prefs.getString('saved_role');
+
+    if (user != null && pass != null && roleStr != null) {
+      _rememberMe = true;
+      final role = UserRole.values.firstWhere((r) => r.name == roleStr, orElse: () => UserRole.siswa);
+      _autoLogin(user, pass, role);
+    }
+  }
+
+  Future<void> _autoLogin(String username, String password, UserRole role) async {
+    int retries = 0;
+    while (_accounts.isEmpty && retries < 10) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      retries++;
+    }
+    if (login(username, password, role)) {
+      debugPrint("Auto-login success for $username");
+    }
+  }
+
   void logout() {
     _isLoggedIn = false;
+    _clearAuth();
+    _rememberMe = false;
     notifyListeners();
   }
 
@@ -1652,15 +1871,9 @@ class AppProvider with ChangeNotifier {
     }
   }
 
-  ScheduleEntry? _activeScheduleForSession;
-
-  void setActiveScheduleForSession(ScheduleEntry? entry) {
-    _activeScheduleForSession = entry;
-  }
-
   bool canEditAttendanceNow() {
-    if (_activeScheduleForSession == null) return true;
-    return isScheduleGroupActive([_activeScheduleForSession!], currentDayName);
+    if (_currentSessionSchedule == null) return true;
+    return isScheduleGroupActive([_currentSessionSchedule!], currentDayName);
   }
 
   void updateProfile({required String name, String? username, String? password, String? avatar}) {
@@ -1704,16 +1917,14 @@ class AppProvider with ChangeNotifier {
     required UserProfile user,
     String? reason,
     List<ScheduleEntry>? scheduleEntries,
+    String slotLabel = '',
+    TeacherAttendanceStatus teacherStatus = TeacherAttendanceStatus.hadir,
+    TeacherAbsenceReason? teacherAbsenceReason,
+    String? teacherNotes,
+    int teacherAmountOfLessons = 1,
   }) async {
-    if (user.role == UserRole.guru &&
-        !canGuruMarkAttendance(cls.id, sub.name)) {
-      return;
-    }
-    if (scheduleEntries != null &&
-        scheduleEntries.isNotEmpty &&
-        !canMarkAttendanceNow(scheduleEntries, currentDayName)) {
-      return;
-    }
+    // Guru tidak boleh isi absensi — hanya sekretaris
+    if (user.role == UserRole.guru) return;
 
     final now = systemNow();
     final role = user.role == UserRole.siswa ? 'siswa' : user.role.name;
@@ -1729,20 +1940,23 @@ class AppProvider with ChangeNotifier {
       for (final entry in statuses.entries) {
         final studentId = entry.key;
 
+        // Hapus record lama untuk slot yang sama
         await supabase
             .from('attendance')
             .delete()
             .eq('student_id', studentId)
             .eq('subject_id', sub.id)
             .gte('date', startOfDay)
-            .lte('date', endOfDay);
+            .lte('date', endOfDay)
+            .eq('slot_label', slotLabel);
 
         _attendance.removeWhere((a) =>
             a.studentId == studentId &&
             a.subjectId == sub.name &&
+            a.slotLabel == slotLabel &&
             isSameCalendarDay(a.date, now));
 
-        final attendanceId = 'at_${now.millisecondsSinceEpoch}_$studentId';
+        final attendanceId = 'at_${now.millisecondsSinceEpoch}_${studentId}_$slotLabel';
         final dbStatus = entry.value.name == 'pulang' ? 'hadir' : entry.value.name;
 
         attendanceInserts.add({
@@ -1750,9 +1964,11 @@ class AppProvider with ChangeNotifier {
           'student_id': studentId,
           'class_id': cls.id,
           'subject_id': sub.id,
+          'slot_label': slotLabel,
           'date': now.toIso8601String(),
           'status': dbStatus,
           'marked_by_role': role,
+          'validation_status': 'pending',
         });
 
         localRecords.add(Attendance(
@@ -1760,12 +1976,14 @@ class AppProvider with ChangeNotifier {
           studentId: studentId,
           classId: cls.id,
           subjectId: sub.name,
+          slotLabel: slotLabel,
           date: now,
           status: entry.value,
           markedBy: user.id,
           markedByRole: role,
           markedByName: user.name,
           reason: reason,
+          validationStatus: ValidationStatus.pending,
         ));
       }
 
@@ -1774,15 +1992,483 @@ class AppProvider with ChangeNotifier {
       }
 
       _attendance.addAll(localRecords);
+
+      // Simpan kehadiran guru jika ada teacherId dari jadwal
+      if (scheduleEntries != null && scheduleEntries.isNotEmpty) {
+        final teacherId = scheduleEntries.first.teacherId;
+        if (teacherId != null && teacherId.isNotEmpty) {
+          await saveTeacherAttendance(
+            teacherId: teacherId,
+            classId: cls.id,
+            subjectId: sub.id,
+            slotLabel: slotLabel,
+            status: teacherStatus,
+            reason: teacherAbsenceReason,
+            notes: teacherNotes,
+            amountOfLessons: teacherAmountOfLessons,
+            reportedBy: user.id,
+          );
+        }
+      }
+
       notifyListeners();
     } catch (e) {
       debugPrint("Error saving attendance batch: $e");
     }
   }
 
+  /// Simpan kehadiran guru per slot (dipanggil dari saveAttendanceBatch)
+  Future<void> saveTeacherAttendance({
+    required String teacherId,
+    required String classId,
+    required String subjectId,
+    required String slotLabel,
+    required TeacherAttendanceStatus status,
+    TeacherAbsenceReason? reason,
+    String? notes,
+    int amountOfLessons = 1,
+    required String reportedBy,
+  }) async {
+    final now = systemNow();
+    try {
+      final supabase = Supabase.instance.client;
+      final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final id = _generateUuidFromText('ta_${teacherId}_${classId}_${slotLabel}_$dateStr');
+
+      // Hapus record lama jika ada
+      await supabase
+          .from('teacher_attendance')
+          .delete()
+          .eq('teacher_id', teacherId)
+          .eq('class_id', classId)
+          .eq('slot_label', slotLabel)
+          .eq('date', dateStr);
+
+      _teacherAttendance.removeWhere((ta) =>
+          ta.teacherId == teacherId &&
+          ta.classId == classId &&
+          ta.slotLabel == slotLabel &&
+          isSameCalendarDay(ta.date, now));
+
+      final statusStr = status == TeacherAttendanceStatus.hadir ? 'hadir' : 'tidak_hadir';
+
+      await supabase.from('teacher_attendance').insert({
+        'id': id,
+        'teacher_id': teacherId,
+        'class_id': classId,
+        'subject_id': subjectId,
+        'slot_label': slotLabel,
+        'date': dateStr,
+        'status': statusStr,
+        'reason': TeacherAttendance.reasonToString(reason).isEmpty ? null : TeacherAttendance.reasonToString(reason),
+        'notes': notes,
+        'amount_of_lessons': amountOfLessons,
+        'reported_by': reportedBy,
+      });
+
+      _teacherAttendance.add(TeacherAttendance(
+        id: id,
+        teacherId: teacherId,
+        classId: classId,
+        subjectId: subjectId,
+        slotLabel: slotLabel,
+        date: now,
+        status: status,
+        reason: reason,
+        notes: notes,
+        amountOfLessons: amountOfLessons,
+        reportedBy: reportedBy,
+      ));
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error saving teacher attendance: $e");
+    }
+  }
+
+  /// Cek apakah window pengisian absensi untuk mapel ini masih terbuka.
+  /// Window terbuka selama slot TERAKHIR mapel di hari itu belum selesai.
+  bool isSubjectWindowOpen(String classId, String subjectId, String day) {
+    final subjectSchedules = _schedules.where((s) =>
+        (s.classId == classId || s.classId == findClassByIdOrName(classId)?.name) &&
+        (s.subjectId == subjectId || s.subjectId == findSubjectByIdOrName(subjectId)?.id) &&
+        s.day == day &&
+        !s.isEvent).toList();
+
+    if (subjectSchedules.isEmpty) return false;
+
+    final slots = getTimeSlots(day);
+    DateTime? latestEnd;
+
+    for (final entry in subjectSchedules) {
+      final slot = slots.cast<TimeSlot?>().firstWhere(
+        (s) => s!.label == entry.slotLabel,
+        orElse: () => null,
+      );
+      if (slot == null) continue;
+      final range = SchoolScheduleUtils.parseTimeRange(slot.timeRange);
+      if (range == null) continue;
+      if (latestEnd == null || range.end.isAfter(latestEnd)) {
+        latestEnd = range.end;
+      }
+    }
+
+    if (latestEnd == null) return false;
+    final now = systemNow();
+    return now.isBefore(latestEnd);
+  }
+
+  /// Cek apakah window pengisian absensi untuk mapel ini sudah dimulai.
+  bool isSubjectWindowStarted(String classId, String subjectId, String day) {
+    final subjectSchedules = _schedules.where((s) =>
+        (s.classId == classId || s.classId == findClassByIdOrName(classId)?.name) &&
+        (s.subjectId == subjectId || s.subjectId == findSubjectByIdOrName(subjectId)?.id) &&
+        s.day == day &&
+        !s.isEvent).toList();
+
+    if (subjectSchedules.isEmpty) return false;
+
+    final slots = getTimeSlots(day);
+    DateTime? earliestStart;
+
+    for (final entry in subjectSchedules) {
+      final slot = slots.cast<TimeSlot?>().firstWhere(
+        (s) => s!.label == entry.slotLabel,
+        orElse: () => null,
+      );
+      if (slot == null) continue;
+      final range = SchoolScheduleUtils.parseTimeRange(slot.timeRange);
+      if (range == null) continue;
+      if (earliestStart == null || range.start.isBefore(earliestStart)) {
+        earliestStart = range.start;
+      }
+    }
+
+    if (earliestStart == null) return false;
+    final now = systemNow();
+    return !now.isBefore(earliestStart);
+  }
+
+  /// Ambil waktu tutup window untuk mapel tertentu di hari ini
+  DateTime? getSubjectWindowCloseTime(String classId, String subjectId, String day) {
+    final subjectSchedules = _schedules.where((s) =>
+        (s.classId == classId || s.classId == findClassByIdOrName(classId)?.name) &&
+        (s.subjectId == subjectId || s.subjectId == findSubjectByIdOrName(subjectId)?.id) &&
+        s.day == day &&
+        !s.isEvent).toList();
+
+    if (subjectSchedules.isEmpty) return null;
+
+    final slots = getTimeSlots(day);
+    DateTime? latestEnd;
+
+    for (final entry in subjectSchedules) {
+      final slot = slots.cast<TimeSlot?>().firstWhere(
+        (s) => s!.label == entry.slotLabel,
+        orElse: () => null,
+      );
+      if (slot == null) continue;
+      final range = SchoolScheduleUtils.parseTimeRange(slot.timeRange);
+      if (range == null) continue;
+      if (latestEnd == null || range.end.isAfter(latestEnd)) {
+        latestEnd = range.end;
+      }
+    }
+
+    return latestEnd;
+  }
+
+  /// Ambil sesi yang belum diisi absensinya hari ini (untuk banner reminder sekretaris)
+  List<Map<String, dynamic>> getUnfilledSessionsToday(String classId) {
+    final today = currentDayName;
+    final now = systemNow();
+    final todaySchedules = _schedules.where((s) =>
+        s.classId == classId && s.day == today && !s.isEvent).toList();
+
+    final result = <Map<String, dynamic>>[];
+    final processedSubjects = <String>{};
+
+    for (final entry in todaySchedules) {
+      final subjectKey = entry.subjectId ?? '';
+      if (processedSubjects.contains(subjectKey)) continue;
+      processedSubjects.add(subjectKey);
+ 
+      // Cek apakah window sudah dibuka (sudah masuk jam pelajaran pertama)
+      final isStarted = isSubjectWindowStarted(classId, entry.subjectId ?? '', today);
+      
+      // Jika belum mulai, skip (jangan tampilkan di reminder sama sekali atau tampilkan Tanpa Tombol)
+      // User bilang: "jangan ada tampilan isi sekarang", so we filter strictly here if preferred
+      // or we can keep it but with different UI. To be safe and clean, let's filter unstarted sessions out of the Reminder list.
+      if (!isStarted) continue;
+
+      // Cek apakah window masih terbuka
+      if (!isSubjectWindowOpen(classId, entry.subjectId ?? '', today)) continue;
+ 
+      // Cek apakah sudah ada absensi untuk slot ini hari ini
+      final subjectName = subjectDisplayName(entry.subjectId ?? '');
+      final hasAttendance = _attendance.any((a) =>
+          a.classId == classId &&
+          a.subjectId == subjectName &&
+          isSameCalendarDay(a.date, now));
+ 
+      if (!hasAttendance) {
+        final closeTime = getSubjectWindowCloseTime(classId, entry.subjectId ?? '', today);
+        result.add({
+          'subjectId': entry.subjectId ?? '',
+          'subjectName': subjectName,
+          'teacherId': entry.teacherId,
+          'closeTime': closeTime,
+          'isStarted': isStarted,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /// Ambil sesi yang menunggu validasi guru (status pending)
+  List<Map<String, dynamic>> getPendingValidationSessions(String teacherId) {
+    final pendingRecords = _attendance.where((a) =>
+        a.validationStatus == ValidationStatus.pending &&
+        a.markedByRole == 'siswa').toList();
+
+    // Group by classId + subjectId + date + slotLabel
+    final Map<String, List<Attendance>> grouped = {};
+    for (final record in pendingRecords) {
+      // Cek apakah guru ini mengajar mapel ini di kelas ini
+      final teaches = _schedules.any((s) =>
+          s.teacherId == teacherId &&
+          (s.classId == record.classId) &&
+          (s.subjectId == record.subjectId || subjectDisplayName(s.subjectId ?? '') == record.subjectId));
+      if (!teaches) continue;
+
+      final key = '${record.classId}_${record.subjectId}_${record.date.day}${record.date.month}${record.date.year}_${record.slotLabel}';
+      grouped.putIfAbsent(key, () => []).add(record);
+    }
+
+    return grouped.entries.map((e) {
+      final records = e.value;
+      final first = records.first;
+      final cls = findClassByIdOrName(first.classId);
+      return {
+        'key': e.key,
+        'classId': first.classId,
+        'className': cls?.name ?? first.classId,
+        'subjectId': first.subjectId,
+        'slotLabel': first.slotLabel,
+        'date': first.date,
+        'records': records,
+        'studentCount': records.length,
+      };
+    }).toList()
+      ..sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+  }
+
+  /// Guru validasi satu sesi absensi (konfirmasi atau tolak)
+  Future<void> validateAttendanceSession({
+    required String classId,
+    required String subjectId,
+    required String slotLabel,
+    required DateTime date,
+    required ValidationStatus newStatus,
+    required String validatedBy,
+  }) async {
+    try {
+      final supabase = Supabase.instance.client;
+      final now = systemNow();
+      final statusStr = newStatus == ValidationStatus.validated ? 'validated' : 'rejected';
+
+      // Update di Supabase
+      final startOfDay = DateTime(date.year, date.month, date.day).toIso8601String();
+      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59).toIso8601String();
+
+      await supabase
+          .from('attendance')
+          .update({
+            'validation_status': statusStr,
+            'validated_by': validatedBy,
+            'validated_at': now.toIso8601String(),
+          })
+          .eq('class_id', classId)
+          .eq('slot_label', slotLabel)
+          .gte('date', startOfDay)
+          .lte('date', endOfDay);
+
+      // Update lokal
+      for (var i = 0; i < _attendance.length; i++) {
+        final a = _attendance[i];
+        if (a.classId == classId &&
+            a.subjectId == subjectId &&
+            a.slotLabel == slotLabel &&
+            isSameCalendarDay(a.date, date)) {
+          _attendance[i] = a.copyWith(
+            validationStatus: newStatus,
+            validatedBy: validatedBy,
+            validatedAt: now,
+          );
+        }
+      }
+
+      // Kirim notifikasi ke Sekretaris yang mengisi
+      try {
+        final firstRecord = _attendance.firstWhere(
+          (a) =>
+              a.classId == classId &&
+              a.subjectId == subjectId &&
+              a.slotLabel == slotLabel &&
+              isSameCalendarDay(a.date, date) &&
+              a.markedByRole == 'siswa',
+        );
+
+        final isConfirm = newStatus == ValidationStatus.validated;
+        final className = findClassByIdOrName(firstRecord.classId)?.name ?? firstRecord.classId;
+
+        addNotification(
+          userId: firstRecord.markedBy,
+          title: isConfirm ? 'Absensi Tervalidasi' : 'Absensi DITOLAK',
+          message: isConfirm
+              ? 'Laporan absensi kelas $className ($slotLabel) telah disetujui Guru.'
+              : 'Guru menolak laporan absensi $className ($slotLabel). Mohon isi kembali.',
+          type: isConfirm ? 'validation_success' : 'validation_rejected',
+        );
+      } catch (_) {
+        // No record found or not marked by siswa, skip notification
+      }
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error validating attendance session: $e");
+    }
+  }
+
+  /// Rekap kehadiran guru per bulan
+  List<TeacherAttendance> getTeacherAttendanceReport(String teacherId, {DateTime? month}) {
+    final ref = month ?? systemNow();
+    final teacher = teachers.firstWhere((t) => t.id == teacherId || t.name == teacherId, orElse: () => Teacher(id: '', nip: '', name: '', position: '', subjects: [], avatar: ''));
+    
+    return _teacherAttendance.where((ta) {
+      final taDate = ta.date.toLocal();
+      // Cocokkan berdasarkan ID Guru atau Nama Guru (antisipasi inkonsistensi DB)
+      final matchesTeacher = ta.teacherId == teacher.id || (teacher.name.isNotEmpty && ta.teacherId == teacher.name);
+      return matchesTeacher &&
+             taDate.month == ref.month &&
+             taDate.year == ref.year;
+    }).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  /// Rekap kehadiran semua guru (untuk admin)
+  Map<String, Map<String, int>> getAllTeachersAttendanceSummary({DateTime? month}) {
+    final ref = month ?? systemNow();
+    final result = <String, Map<String, int>>{};
+
+    for (final teacher in _teachers) {
+      final records = _teacherAttendance.where((ta) {
+        // Normalisasi tanggal untuk perbandingan bulan/tahun yang aman
+        final taDate = ta.date.toLocal();
+        return ta.teacherId == teacher.id &&
+               taDate.month == ref.month &&
+               taDate.year == ref.year;
+      }).toList();
+
+      int totTidakHadir = 0;
+      int totHadir = 0;
+
+      for (var r in records) {
+        if (r.status == TeacherAttendanceStatus.tidakHadir) {
+          totTidakHadir += r.amountOfLessons;
+        } else {
+          // Asumsi jika hadir, dihitung sebagai jumlah jam pelajaran di slot tersebut
+          // Di sistem kita, absensi guru pengajar biasanya 1-2 jam per slot
+          totHadir += r.amountOfLessons;
+        }
+      }
+
+      result[teacher.id] = {
+        'total': totHadir + totTidakHadir,
+        'hadir': totHadir,
+        'tidakHadir': totTidakHadir,
+      };
+    }
+
+    return result;
+  }
+
   // Schedule Logic
   List<ScheduleEntry> getTeacherSchedules(String teacherId, {String? day}) {
     return _schedules.where((s) => s.teacherId == teacherId && (day == null || s.day == day)).toList();
+  }
+
+  /// Check if a string looks like a valid teacher ID (not a name)
+  bool _isValidTeacherId(String id) {
+    // Valid teacher IDs typically start with a letter followed by numbers (e.g., G01, G08)
+    // Names contain spaces, commas, etc.
+    return id.isNotEmpty && !id.contains(' ') && !id.contains(',');
+  }
+
+  /// Fix schedules that have teacher names instead of teacher IDs
+  /// Returns the number of schedules fixed
+  Future<int> fixScheduleTeacherIds() async {
+    int fixedCount = 0;
+    final List<ScheduleEntry> schedulesToUpdate = [];
+
+    for (int i = 0; i < _schedules.length; i++) {
+      final schedule = _schedules[i];
+      final teacherId = schedule.teacherId;
+
+      // Skip if teacherId is already valid or empty
+      if (teacherId == null ||
+          teacherId.isEmpty ||
+          _isValidTeacherId(teacherId)) {
+        continue;
+      }
+
+      // Try to find teacher by name
+      final teacher = _teachers.firstWhere(
+        (t) => t.name.toLowerCase() == teacherId.toLowerCase(),
+        orElse: () => Teacher(id: '', nip: '', name: '', position: '', subjects: [], avatar: ''),
+      );
+
+      if (teacher.id.isNotEmpty) {
+        // Update the schedule with correct teacher ID
+        schedulesToUpdate.add(ScheduleEntry(
+          id: schedule.id,
+          day: schedule.day,
+          slotLabel: schedule.slotLabel,
+          classId: schedule.classId,
+          subjectId: schedule.subjectId,
+          roomId: schedule.roomId,
+          teacherId: teacher.id,
+          isEvent: schedule.isEvent,
+          customTitle: schedule.customTitle,
+        ));
+        fixedCount++;
+      }
+    }
+
+    if (schedulesToUpdate.isNotEmpty) {
+      try {
+        final supabase = Supabase.instance.client;
+        for (final schedule in schedulesToUpdate) {
+          await supabase
+              .from('schedules')
+              .update({'teacher_id': schedule.teacherId})
+              .eq('id', schedule.id);
+          
+          // Update local state
+          final idx = _schedules.indexWhere((s) => s.id == schedule.id);
+          if (idx != -1) {
+            _schedules[idx] = schedule;
+          }
+        }
+        notifyListeners();
+        debugPrint('Fixed $fixedCount schedules with invalid teacher IDs');
+      } catch (e) {
+        debugPrint('Error fixing schedule teacher IDs: $e');
+      }
+    }
+
+    return fixedCount;
   }
 
   List<Attendance> getTeacherAttendanceRekap(String teacherId, {DateTime? filterDate}) {
@@ -1861,6 +2547,29 @@ class AppProvider with ChangeNotifier {
       await supabase.from('schedules').delete().eq('id', uuid);
     } catch (e) {
       debugPrint("Error deleting schedule entry: $e");
+    }
+  }
+
+  Future<void> bulkUpsertSchedules(List<ScheduleEntry> entries) async {
+    _schedules.addAll(entries);
+    notifyListeners();
+    try {
+      final supabase = Supabase.instance.client;
+      final List<Map<String, dynamic>> data = entries.map((entry) => {
+        'id': entry.id.length >= 36 ? entry.id : _generateUuidFromText(entry.id),
+        'class_id': entry.classId,
+        'day_name': entry.day,
+        'slot_label': entry.slotLabel,
+        'is_event': entry.isEvent,
+        'custom_title': entry.customTitle,
+        'subject_id': entry.subjectId,
+        'room_name': entry.roomId,
+        'teacher_id': entry.teacherId,
+      }).toList();
+      
+      await supabase.from('schedules').upsert(data);
+    } catch (e) {
+      debugPrint("Error bulk saving schedules: $e");
     }
   }
 }

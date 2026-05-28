@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,10 @@ import '../../providers/app_provider.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_badge.dart';
+import 'package:excel/excel.dart' as ex;
+import 'package:file_picker/file_picker.dart';
+import 'package:file_saver/file_saver.dart';
+import '../../core/school_schedule_utils.dart';
 
 class ModulJadwalPelajaran extends StatefulWidget {
   const ModulJadwalPelajaran({super.key});
@@ -90,7 +95,7 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
                   _buildDropdown<String>(
                     hint: 'Pilih Guru',
                     value: selectedTeacherId,
-                    items: provider.teachers.map((t) => DropdownMenuItem<String>(value: t.id, child: Text(t.name))).toList(),
+                    items: provider.teachers.map((t) => DropdownMenuItem<String>(value: t.id, child: Text('${t.name} (${t.nip})'))).toList(),
                     onChanged: (v) {
                       setDialogState(() {
                         selectedTeacherId = v;
@@ -191,14 +196,191 @@ class _ModulJadwalPelajaranState extends State<ModulJadwalPelajaran> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        Text('Jadwal Pelajaran', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
-        SizedBox(height: 4),
-        Text('Kelola jadwal belajar mengajar sesuai waktu operasional harian.', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text('Jadwal Pelajaran', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+              SizedBox(height: 4),
+              Text('Kelola jadwal belajar mengajar sesuai waktu operasional harian.', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        Row(
+          children: [
+            CustomButton(
+              variant: ButtonVariant.outline,
+              icon: const Icon(LucideIcons.download, size: 18),
+              onClick: _downloadTemplate,
+              child: const Text('Download Template'),
+            ),
+            const SizedBox(width: 16),
+            CustomButton(
+              variant: ButtonVariant.primary,
+              icon: const Icon(LucideIcons.upload, size: 18),
+              onClick: _importFromExcel,
+              child: const Text('Import Excel'),
+            ),
+            const SizedBox(width: 16),
+            CustomButton(
+              variant: ButtonVariant.secondary,
+              icon: const Icon(LucideIcons.wrench, size: 18),
+              onClick: _fixTeacherIds,
+              child: const Text('Fix Teacher IDs'),
+            ),
+          ],
+        ),
       ],
     );
+  }
+
+  Future<void> _downloadTemplate() async {
+    final excel = ex.Excel.createExcel();
+    final sheetName = 'Jadwal';
+    excel.rename('Sheet1', sheetName);
+    final sheet = excel[sheetName];
+
+    // Kolom: Hari, Slot, Kelas, Mapel, Ruangan, Guru
+    sheet.appendRow(['Hari', 'Slot', 'Kelas', 'Mapel', 'Ruangan', 'Guru']);
+    sheet.appendRow(['Senin', 'Jam 1', 'XI RPL 1', 'Matematika', 'R.01', 'Budi Santoso']);
+    sheet.appendRow(['Senin', 'Jam 2', 'XI RPL 1', 'B. Indonesia', 'R.01', 'Siti Aminah']);
+
+    final bytes = excel.save();
+    if (bytes != null) {
+      final fileName = "Template_Jadwal_${DateTime.now().millisecondsSinceEpoch}";
+      await FileSaver.instance.saveFile(
+        name: fileName,
+        bytes: Uint8List.fromList(bytes),
+        ext: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Template berhasil diunduh: $fileName.xlsx'), backgroundColor: Colors.green),
+        );
+      }
+    }
+  }
+
+  Future<void> _fixTeacherIds() async {
+    final provider = context.read<AppProvider>();
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Perbaiki Teacher ID'),
+        content: const Text('Ini akan memperbaiki jadwal yang memiliki teacher ID berupa nama guru menjadi ID yang valid. Lanjutkan?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          CustomButton(onClick: () => Navigator.pop(ctx, true), child: const Text('Ya, Perbaiki')),
+        ],
+      ),
+    );
+    
+    if (confirmed != true) return;
+    
+    try {
+      final fixedCount = await provider.fixScheduleTeacherIds();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Berhasil memperbaiki $fixedCount jadwal.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal memperbaiki: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _importFromExcel() async {
+    final provider = context.read<AppProvider>();
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+
+    if (result == null) return;
+
+    try {
+      final bytes = result.files.first.bytes;
+      if (bytes == null) return;
+
+      final excel = ex.Excel.decodeBytes(bytes);
+      final List<ScheduleEntry> newEntries = [];
+
+      for (var table in excel.tables.keys) {
+        final rows = excel.tables[table]!.rows;
+        if (rows.length < 2) continue; // Header + min 1 row
+
+        // Skip header
+        for (int i = 1; i < rows.length; i++) {
+          final row = rows[i];
+          if (row.length < 6) continue;
+
+          final day = row[0]?.value?.toString() ?? '';
+          final slot = row[1]?.value?.toString() ?? '';
+          final className = row[2]?.value?.toString() ?? '';
+          final subjectName = row[3]?.value?.toString() ?? '';
+          final roomName = row[4]?.value?.toString() ?? '';
+          final teacherName = row[5]?.value?.toString() ?? '';
+
+          if (day.isEmpty || slot.isEmpty || className.isEmpty) continue;
+
+          // Find IDs from names
+          final cls = provider.findClassByIdOrName(className);
+          final subject = provider.findSubjectByIdOrName(subjectName);
+          final room = provider.rooms.firstWhere((r) => r.name.toLowerCase() == roomName.toLowerCase(), orElse: () => provider.rooms.firstWhere((r) => r.id == roomName, orElse: () => Room(id: '', name: '', category: '')));
+          final teacher = provider.teachers.firstWhere((t) => t.name.toLowerCase() == teacherName.toLowerCase(), orElse: () => provider.teachers.firstWhere((t) => t.id == teacherName, orElse: () => Teacher(id: '', nip: '', name: '', position: '', subjects: [], avatar: '')));
+
+          if (cls == null) continue;
+          
+          // Skip if teacher not found (don't fallback to name)
+          if (teacher.id.isEmpty) {
+            debugPrint('Skipping schedule: Teacher "$teacherName" not found in database');
+            continue;
+          }
+
+          newEntries.add(ScheduleEntry(
+            id: AppProvider.generateNewUuid(),
+            day: day,
+            slotLabel: slot,
+            classId: cls.id,
+            subjectId: subject?.id ?? subjectName,
+            roomId: room.id.isEmpty ? roomName : room.id,
+            teacherId: teacher.id,
+          ));
+        }
+      }
+
+      if (newEntries.isNotEmpty) {
+        await provider.bulkUpsertSchedules(newEntries);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Berhasil mengimpor ${newEntries.length} jadwal.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal mengimpor Excel: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   Widget _buildDaySwitcher() {

@@ -65,6 +65,11 @@ class _AppEntryState extends State<_AppEntry> {
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
 
+    // Jika sedang login, otomatis tandai sudah melihat splash (untuk antisipasi auto-login)
+    if (provider.isLoggedIn && !_hasSeenSplash) {
+      _hasSeenSplash = true;
+    }
+
     // DETEKSI LOGOUT: Hanya reset role jika status berubah dari login -> tidak login
     if (provider.isLoggedIn && !_wasLoggedIn) {
       _wasLoggedIn = true;
@@ -72,11 +77,12 @@ class _AppEntryState extends State<_AppEntry> {
       _wasLoggedIn = false;
       // Gunakan delay agar tidak terjadi setState saat build
       Future.delayed(Duration.zero, () {
-        if (mounted) setState(() {
-          _selectedRole = null;
-          // _hasSeenSplash tetap true agar tidak memutar ulang animasi splash saat logout
-          // User langsung diarahkan ke halaman pemilihan role
-        });
+        if (mounted) {
+          setState(() {
+            _selectedRole = null;
+            _hasSeenSplash = true; // Pastikan skip splash saat logout
+          });
+        }
       });
     }
 
@@ -92,7 +98,7 @@ class _AppEntryState extends State<_AppEntry> {
         onRoleSelected: (role) {
           setState(() {
             _selectedRole = role;
-            _hasSeenSplash = true; // Tandai sudah melihat splash
+            _hasSeenSplash = true;
           });
         },
       );

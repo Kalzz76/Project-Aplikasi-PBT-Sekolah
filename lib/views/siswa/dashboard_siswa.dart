@@ -22,6 +22,7 @@ class DashboardSiswa extends StatefulWidget {
 
 class _DashboardSiswaState extends State<DashboardSiswa> {
   bool _isWeeklyMode = false;
+  bool _isNotificationsExpanded = true;
 
   List<GroupedSchedule> _groupSchedules(List<ScheduleEntry> schedules, AppProvider provider, String day) {
     if (schedules.isEmpty) return [];
@@ -115,12 +116,13 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
     final isSecretary = user.position?.contains('Sekretaris') ?? false;
 
     // Filter schedules for the student's class
-    final classId = provider.classes.isEmpty
-        ? ''
-        : provider.classes.firstWhere(
-            (c) => c.name == user.kelas,
-            orElse: () => provider.classes.first,
-          ).id;
+    final currentClass = provider.classes.firstWhere(
+      (c) => c.name == user.kelas,
+      orElse: () => provider.classes.isNotEmpty 
+          ? provider.classes.first 
+          : SchoolClass(id: '', name: '', homeroomTeacherId: '', homeroomTeacherName: '', roomName: '-', totalStudents: 0),
+    );
+    final classId = currentClass.id;
     final allClassSchedules = provider.schedules.where((s) => s.classId == classId).toList();
     final today = provider.currentDayName;
     final todaySchedules = allClassSchedules.where((s) => s.day == today).toList();
@@ -128,7 +130,10 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (isSecretary) _buildSecretaryReminder(provider, user),
         _buildStudentBanner(user),
+        const SizedBox(height: 24),
+        _buildNotificationSection(provider, user.id, provider.isDarkMode),
         const SizedBox(height: 32),
         
         Row(
@@ -144,7 +149,7 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
         const SizedBox(height: 24),
 
         if (_isWeeklyMode)
-          _buildWeeklySchedule(allClassSchedules, provider)
+          _buildWeeklySchedule(allClassSchedules, provider, currentClass)
         else
           _buildDailyScheduleList(todaySchedules, provider, isSecretary),
       ],
@@ -290,6 +295,8 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                     children: [
                       Text(subject.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark))),
                       Text('Guru: ${teacher.name}', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : AppColors.textSecondary)),
+                      if (!group.isEvent)
+                        Text('Ruang: ${provider.roomDisplayName(entry, cls)}', style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textMuted)),
                     ],
                   ),
                 ),
@@ -432,9 +439,146 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
         ),
       ),
     );
+  }  Widget _buildNotificationSection(AppProvider provider, String userId, bool isDark) {
+    final notifications = provider.getNotificationsForUser(userId);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            InkWell(
+              onTap: () => setState(() => _isNotificationsExpanded = !_isNotificationsExpanded),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      'Notifikasi Terbaru',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark).withOpacity(0.8)),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      _isNotificationsExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                      size: 16,
+                      color: AppColors.textMuted,
+                    ),
+                    if (!_isNotificationsExpanded && notifications.any((n) => !n.isRead))
+                      Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const Spacer(),
+            if (notifications.isNotEmpty)
+              TextButton(
+                onPressed: () => provider.clearNotifications(userId),
+                child: const Text('Bersihkan Semua', style: TextStyle(fontSize: 12, color: AppColors.danger)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        
+        // Content
+        AnimatedCrossFade(
+          firstChild: notifications.isEmpty
+              ? Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white.withOpacity(0.02) : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(LucideIcons.bellOff, size: 24, color: AppColors.textMuted.withOpacity(0.5)),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Tidak ada notifikasi baru',
+                        style: TextStyle(fontSize: 13, color: AppColors.textMuted, fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: notifications.take(3).map((n) {
+                    final isRejected = n.type == 'validation_rejected';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isRejected ? AppColors.danger : AppColors.primary).withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      child: CustomCard(
+                        color: n.isRead ? null : (isDark ? Colors.white.withOpacity(0.05) : Colors.white),
+                        child: InkWell(
+                          onTap: () => provider.markNotificationAsRead(n.id),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: (isRejected ? AppColors.danger : AppColors.primary).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  isRejected ? LucideIcons.alertCircle : LucideIcons.checkCircle2,
+                                  color: isRejected ? AppColors.danger : AppColors.primary,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(n.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.getTextColor(isDark))),
+                                        if (!n.isRead) ...[
+                                          const SizedBox(width: 8),
+                                          Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle)),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(n.message, style: TextStyle(fontSize: 12, color: isDark ? Colors.white60 : AppColors.textSecondary)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '${n.timestamp.hour}:${n.timestamp.minute.toString().padLeft(2, '0')}',
+                                style: TextStyle(fontSize: 11, color: isDark ? Colors.white30 : AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+          secondChild: const SizedBox.shrink(),
+          crossFadeState: _isNotificationsExpanded ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+          duration: const Duration(milliseconds: 300),
+        ),
+      ],
+    );
   }
 
-  Widget _buildWeeklySchedule(List<ScheduleEntry> allSchedules, AppProvider provider) {
+  Widget _buildWeeklySchedule(List<ScheduleEntry> allSchedules, AppProvider provider, SchoolClass currentClass) {
     final days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'];
     final isDark = provider.isDarkMode;
     return Column(
@@ -459,7 +603,11 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
                       children: [
                         Container(width: 90, child: Text(group.timeRange, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.getTextColor(isDark)))),
                         Expanded(child: Text(group.isEvent ? (s.customTitle ?? 'Kegiatan') : provider.subjects.firstWhere((sb) => sb.id == s.subjectId || sb.name == s.subjectId, orElse: () => Subject(id: '', name: s.subjectId ?? '?', teacherIds: [])).name, style: TextStyle(color: AppColors.getTextColor(isDark)))),
-                        if (!group.isEvent) Text(s.roomId ?? 'R.?', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textMuted)),
+                        if (!group.isEvent) 
+                          Text(
+                            provider.roomDisplayName(s, currentClass), 
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isDark ? Colors.white60 : AppColors.textMuted),
+                          ),
                       ],
                     ),
                   );
@@ -469,6 +617,80 @@ class _DashboardSiswaState extends State<DashboardSiswa> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildSecretaryReminder(AppProvider provider, user) {
+    final clsId = provider.classes.firstWhere((c) => c.name == user.kelas, orElse: () => provider.classes.first).id;
+    final unfilled = provider.getUnfilledSessionsToday(clsId);
+
+    if (unfilled.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.warning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(LucideIcons.info, color: AppColors.warning, size: 20),
+              SizedBox(width: 12),
+              Text(
+                'Pengingat Absensi',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.warning),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...unfilled.map((session) {
+            final closeTime = session['closeTime'] as DateTime?;
+            final isStarted = session['isStarted'] as bool? ?? false;
+            final timeStr = closeTime != null ? '${closeTime.hour.toString().padLeft(2, '0')}:${closeTime.minute.toString().padLeft(2, '0')}' : '-';
+            
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                   Icon(LucideIcons.dot, size: 16, color: isStarted ? AppColors.warning : AppColors.textMuted),
+                   Expanded(
+                     child: Text(
+                       'Belum diisi: ${session['subjectName']} ' + (isStarted ? '(Window tutup pukul $timeStr)' : '(Belum mulai)'),
+                       style: TextStyle(
+                         fontSize: 14, 
+                         fontWeight: FontWeight.w500,
+                         color: isStarted ? AppColors.textPrimary : AppColors.textMuted,
+                       ),
+                     ),
+                   ),
+                   if (isStarted)
+                     TextButton(
+                       onPressed: () {
+                         final cls = provider.findClassByIdOrName(clsId);
+                         final sub = provider.subjects.firstWhere((s) => s.id == session['subjectId'] || s.name == session['subjectId']);
+                         provider.setSelectedClassForAttendance(cls);
+                         provider.setSelectedSubjectForAttendance(sub);
+                         provider.setActiveSlotLabel(''); 
+                         provider.setActiveMenu('isi_absensi');
+                       },
+                       child: const Text('Isi Sekarang'),
+                     )
+                   else
+                     const Padding(
+                       padding: EdgeInsets.symmetric(horizontal: 12),
+                       child: Text('Segera Datang', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: AppColors.textMuted)),
+                     ),
+                ],
+              ),
+            );
+          }).toList(),
+        ],
+      ),
     );
   }
 }

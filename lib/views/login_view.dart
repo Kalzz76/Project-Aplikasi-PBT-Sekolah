@@ -38,6 +38,8 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AppProvider>();
+    
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -137,6 +139,27 @@ class _LoginViewState extends State<LoginView> {
                         icon: LucideIcons.lock,
                         isPassword: true,
                         hint: 'Masukkan password anda',
+                      ),
+                      const SizedBox(height: 16),
+                      
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                              value: provider.rememberMe,
+                              onChanged: (v) => provider.setRememberMe(v ?? false),
+                              activeColor: AppColors.primary,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Ingat Saya',
+                            style: TextStyle(fontSize: 14, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 32),
 

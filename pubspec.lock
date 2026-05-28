@@ -403,11 +403,19 @@ packages:
   lucide_flutter:
     dependency: "direct main"
     description:
+<<<<<<< HEAD
       name: lucide_flutter
       sha256: fd05803b9eca30d321647e3b2e84ccc432dc90aff3538856923a05e645fb4f12
       url: "https://pub.dev"
     source: hosted
     version: "1.16.0"
+=======
+      name: lucide_icons_flutter
+      sha256: "7c5dc01a32a9905ae34e2d84224e92d6d0c42acf8926df9e01c35a1446bf1b69"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.14+2"
+>>>>>>> 8b70708 (feat: Tambah riwayat kehadiran guru, perbaiki notifikasi sekretaris, dan pagination laporan - Tambah fitur riwayat kehadiran guru di halaman admin (dialog detail per guru) - Tambah panel notifikasi yang bisa dilipat/dibuka di dashboard sekretaris - Tambah tampilan kosong (empty state) saat notifikasi sudah dibersihkan - Perbaiki bug Alpa siluman (A:36) saat absensi belum diisi - Tambah pagination halaman guru (10 per halaman) - Perbaiki overflow garis kuning-hitam di halaman jadwal pelajaran - Perbaiki bar perbandingan kehadiran guru agar selalu tampil walaupun 0)
   matcher:
     dependency: transitive
     description:
@@ -633,7 +641,7 @@ packages:
     source: hosted
     version: "0.28.0"
   shared_preferences:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: shared_preferences
       sha256: c3025c5534b01739267eb7d76959bbc25a6d10f6988e1c2a3036940133dd10bf

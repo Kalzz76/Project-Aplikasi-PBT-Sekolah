@@ -20,6 +20,7 @@ import 'admin/modul_chronos.dart';
 import 'guru/dashboard_guru.dart';
 import 'guru/modul_rekap_absensi.dart';
 import 'guru/halaman_absensi.dart';
+import 'guru/halaman_validasi_absensi.dart';
 import 'siswa/dashboard_siswa.dart';
 
 class MainLayout extends StatelessWidget {
@@ -32,14 +33,15 @@ class MainLayout extends StatelessWidget {
 
     final bodyDecoration = provider.isDarkMode
         ? const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+            gradient: RadialGradient(
+              center: Alignment(-0.5, -0.5),
+              radius: 1.5,
               colors: [
-                Color(0xFF0F172A),
-                Color(0xFF1E1B4B),
-                Color(0xFF020617),
+                Color(0xFF1E1B4B), // Deep Indigo
+                Color(0xFF0F172A), // Deep Slate
+                Color(0xFF020617), // Blackest Slate
               ],
+              stops: [0.0, 0.5, 1.0],
             ),
           )
         : const BoxDecoration(color: AppColors.background);
@@ -139,6 +141,8 @@ class MainLayout extends StatelessWidget {
           return const DashboardGuru();
         case 'rekap':
           return const ModulRekapAbsensi();
+        case 'validasi_absensi':
+          return const HalamanValidasiAbsensi();
         case 'isi_absensi':
           return const HalamanAbsensi();
         default:

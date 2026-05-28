@@ -7,6 +7,7 @@ import 'dart:ui';
 import '../models/user.dart';
 import 'custom_badge.dart';
 import 'app_avatar.dart';
+import 'app_logo.dart';
 
 class Sidebar extends StatelessWidget {
   const Sidebar({super.key});
@@ -19,41 +20,40 @@ class Sidebar extends StatelessWidget {
 
     final sidebarContent = Container(
       width: 260,
-      color: isDark ? Colors.black.withOpacity(0.25) : AppColors.sidebarBg,
-      child: Column(
-        children: [
-          // Logo Header
-          Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            decoration: const BoxDecoration(
-              color: AppColors.sidebarHeader,
-              border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(LucideIcons.bookOpen, color: Colors.white, size: 18),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A).withOpacity(0.8) : AppColors.sidebarBg,
+        border: Border(right: BorderSide(color: isDark ? Colors.white.withOpacity(0.05) : Colors.transparent)),
+      ),
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: isDark ? ImageFilter.blur(sigmaX: 10, sigmaY: 10) : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+          child: Column(
+            children: [
+              // Logo Header
+              Container(
+                height: 72,
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withOpacity(0.02) : AppColors.sidebarHeader,
+                  border: Border(bottom: BorderSide(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFF1E293B))),
                 ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Classio',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.5,
-                  ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.bookOpen, size: 30, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Classio',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                        shadows: isDark ? [Shadow(color: AppColors.primary.withOpacity(0.5), blurRadius: 10)] : [],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
 
           // Menu Items
           Expanded(
@@ -114,7 +114,9 @@ class Sidebar extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
 
     return sidebarContent;
   }
@@ -143,9 +145,18 @@ class Sidebar extends StatelessWidget {
         _buildMenuItem(context, provider, 'chronos', 'Chronos', Icons.science),
       ];
     } else if (role == UserRole.guru) {
+      final pendingCount = provider.getPendingValidationSessions(provider.currentUser.id).length;
       return [
         _buildGroupHeader('Akademik'),
         _buildMenuItem(context, provider, 'dashboard', 'Jadwal Mengajar', LucideIcons.calendar),
+        _buildMenuItem(
+          context, 
+          provider, 
+          'validasi_absensi', 
+          'Validasi Absensi', 
+          LucideIcons.clipboardCheck,
+          badgeCount: pendingCount,
+        ),
         _buildMenuItem(context, provider, 'rekap', 'Rekap Absensi', LucideIcons.fileText),
       ];
     } else {
@@ -171,13 +182,14 @@ class Sidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuItem(BuildContext context, AppProvider provider, String id, String label, IconData icon) {
+  Widget _buildMenuItem(BuildContext context, AppProvider provider, String id, String label, IconData icon, {int badgeCount = 0}) {
     return _HoverableSidebarItem(
       id: id,
       label: label,
       icon: icon,
       isActive: provider.activeMenu == id,
       onTap: () => provider.setActiveMenu(id),
+      badgeCount: badgeCount,
     );
   }
 }
@@ -188,6 +200,7 @@ class _HoverableSidebarItem extends StatefulWidget {
   final IconData icon;
   final bool isActive;
   final VoidCallback onTap;
+  final int badgeCount;
 
   const _HoverableSidebarItem({
     required this.id,
@@ -195,6 +208,7 @@ class _HoverableSidebarItem extends StatefulWidget {
     required this.icon,
     required this.isActive,
     required this.onTap,
+    this.badgeCount = 0,
   });
 
   @override
@@ -250,7 +264,19 @@ class _HoverableSidebarItemState extends State<_HoverableSidebarItem> {
                     child: Text(widget.label),
                   ),
                 ),
-                if (widget.isActive)
+                if (widget.badgeCount > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.danger,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      widget.badgeCount.toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  )
+                else if (widget.isActive)
                   Container(
                     width: 4,
                     height: 4,

@@ -8,6 +8,9 @@ import '../../models/schedule.dart';
 import '../../models/school_class.dart';
 import '../../models/subject.dart';
 import '../../providers/app_provider.dart';
+import '../../models/attendance.dart';
+import '../../models/student.dart';
+import '../../models/teacher_attendance.dart';
 import '../../core/chronos_service.dart';
 import '../../widgets/custom_card.dart';
 import '../../widgets/custom_button.dart';
@@ -147,6 +150,9 @@ class _DashboardGuruState extends State<DashboardGuru> {
           _buildEmergencyCallSection(provider.isDarkMode),
           const SizedBox(height: 32),
         ],
+
+        _buildUpcomingReminder(provider, groupedToday),
+        const SizedBox(height: 32),
         
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -292,7 +298,6 @@ class _DashboardGuruState extends State<DashboardGuru> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
               Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -315,7 +320,6 @@ class _DashboardGuruState extends State<DashboardGuru> {
                   ],
                 ),
               ),
-              // Body
               Flexible(
                 child: history.isEmpty
                     ? Padding(
@@ -432,14 +436,55 @@ class _DashboardGuruState extends State<DashboardGuru> {
         final subject = provider.subjects.firstWhere((s) => s.id == entry.subjectId || s.name == entry.subjectId, orElse: () => Subject(id: '', name: 'Mapel', teacherIds: []));
         final cls = provider.classes.firstWhere((c) => c.id == entry.classId || c.name == entry.classId, orElse: () => SchoolClass(id: '', name: 'Kelas', homeroomTeacherId: '', homeroomTeacherName: '', roomName: '', totalStudents: 0));
 
-        // Check if marked by secretary
         final today = ChronosService.instance.now();
-        final markedAttendance = provider.attendance.where((a) => a.classId == entry.classId && a.subjectId == subject.name && a.date.day == today.day && a.date.month == today.month).toList();
-        final isAlreadyMarked = markedAttendance.isNotEmpty;
-        final markedBySec = provider.isAttendanceFilledBySecretary(entry.classId, subject.name);
-        final guruBlocked = markedBySec;
+        // Attendance biasanya disimpan per-slot (mis. "Jam 11"), sedangkan tampilan bisa digabung
+        // jadi label "Jam 11 - 12". Anggap "sudah diisi" jika ada record untuk salah satu slot di grup.
+        final slotLabels = group.entries.map((e) => e.slotLabel).toSet()..add(group.label);
 
+        final sessionRecords = provider.attendance
+            .where((a) =>
+                a.classId == entry.classId &&
+                a.subjectId == subject.name &&
+                slotLabels.contains(a.slotLabel) &&
+                a.date.year == today.year &&
+                a.date.month == today.month &&
+                a.date.day == today.day)
+            .toList();
+
+        final teacherRecords = provider.teacherAttendance
+            .where((t) =>
+                t.teacherId == provider.currentUser.id &&
+                t.classId == entry.classId &&
+                slotLabels.contains(t.slotLabel) &&
+                t.date.year == today.year &&
+                t.date.month == today.month &&
+                t.date.day == today.day)
+            .toList();
+
+        final isAlreadyMarked = sessionRecords.isNotEmpty || teacherRecords.isNotEmpty;
+        final validationStatus = sessionRecords.isNotEmpty ? sessionRecords.first.validationStatus : null;
         final isPassed = provider.isScheduleGroupPassed(group.entries, provider.currentDayName);
+
+        // Badge & label berdasarkan status validasi atau kehadiran guru
+        BadgeVariant validBadgeVariant;
+        String validBadgeText;
+        
+        if (!isAlreadyMarked) {
+          validBadgeVariant = BadgeVariant.defaultValue;
+          validBadgeText = 'BELUM DIISI';
+        } else if (teacherRecords.isNotEmpty && teacherRecords.first.status == TeacherAttendanceStatus.tidakHadir) {
+          validBadgeVariant = BadgeVariant.danger;
+          validBadgeText = 'TIDAK HADIR';
+        } else if (validationStatus == ValidationStatus.validated) {
+          validBadgeVariant = BadgeVariant.success;
+          validBadgeText = 'TERVALIDASI';
+        } else if (validationStatus == ValidationStatus.rejected) {
+          validBadgeVariant = BadgeVariant.danger;
+          validBadgeText = 'DITOLAK';
+        } else {
+          validBadgeVariant = BadgeVariant.warning;
+          validBadgeText = 'MENUNGGU VALIDASI';
+        }
 
         return CustomCard(
           noPadding: true,
@@ -473,8 +518,8 @@ class _DashboardGuruState extends State<DashboardGuru> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.getBgColor(isDark), 
-                        borderRadius: BorderRadius.circular(12), 
+                        color: AppColors.getBgColor(isDark),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.getBorderColor(isDark)),
                       ),
                       child: Row(
@@ -486,83 +531,30 @@ class _DashboardGuruState extends State<DashboardGuru> {
                       ),
                     ),
                     const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Badge 1: Filler Info
-                        isAlreadyMarked
-                            ? (guruBlocked
-                                ? const CustomBadge(
-                                    variant: BadgeVariant.indigo,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(LucideIcons.lock, size: 12, color: Color(0xFF4338CA)),
-                                        SizedBox(width: 4),
-                                        Text('DIISI SEKRETARIS'),
-                                      ],
-                                    ),
-                                  )
-                                : const CustomBadge(
-                                    variant: BadgeVariant.orange,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(LucideIcons.lock, size: 12, color: Color(0xFFB45309)),
-                                        SizedBox(width: 4),
-                                        Text('DIISI GURU'),
-                                      ],
-                                    ),
-                                  ))
-                            : const CustomBadge(
-                                variant: BadgeVariant.defaultValue,
-                                child: Text('BELUM DIISI'),
-                              ),
-                        const SizedBox(width: 8),
-                        // Badge 2: Status (SELESAI / BELUM)
-                        (isAlreadyMarked || isPassed)
-                            ? const CustomBadge(
-                                variant: BadgeVariant.success,
-                                child: Text('SELESAI'),
-                              )
-                            : const CustomBadge(
-                                variant: BadgeVariant.warning,
-                                child: Text('BELUM'),
-                              ),
-                      ],
+                    // Badge status validasi
+                    Center(
+                      child: CustomBadge(
+                        variant: validBadgeVariant,
+                        child: Text(validBadgeText),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    if (isPassed)
-                      // No button if passed (locked)
-                      const SizedBox.shrink()
-                    else if (guruBlocked)
-                      // No button if blocked by secretary
-                      const SizedBox.shrink()
-                    else if (isAlreadyMarked)
+                    // Tombol validasi jika ada yang menunggu
+                    if (isAlreadyMarked && validationStatus == ValidationStatus.pending)
                       CustomButton(
                         width: double.infinity,
-                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
+                        variant: ButtonVariant.primary,
                         icon: const Icon(LucideIcons.clipboardCheck, size: 18),
-                        onClick: isOngoing
-                            ? () {
-                                provider.setActiveScheduleForSession(entry);
-                                provider.startAttendanceSession(cls, subject);
-                              }
-                            : null,
-                        child: Text(isOngoing ? 'Ubah Absensi' : 'Edit saat jam pelajaran'),
+                        onClick: () => provider.setActiveMenu('validasi_absensi'),
+                        child: const Text('Validasi Sekarang'),
                       )
-                    else
+                    else if (!isAlreadyMarked && !isPassed)
                       CustomButton(
                         width: double.infinity,
-                        variant: isOngoing ? ButtonVariant.primary : ButtonVariant.outline,
-                        icon: const Icon(LucideIcons.clipboardCheck, size: 18),
-                        onClick: isOngoing
-                            ? () {
-                                provider.setActiveScheduleForSession(entry);
-                                provider.startAttendanceSession(cls, subject);
-                              }
-                            : null,
-                        child: Text(isOngoing ? 'Isi Absensi Sekarang' : 'Belum Waktunya'),
+                        variant: ButtonVariant.outline,
+                        icon: const Icon(LucideIcons.clock, size: 18),
+                        onClick: null,
+                        child: const Text('Menunggu Sekretaris'),
                       ),
                   ],
                 ),
@@ -664,7 +656,7 @@ class _DashboardGuruState extends State<DashboardGuru> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(color: AppColors.getBgColor(provider.isDarkMode), borderRadius: BorderRadius.circular(6)),
-                          child: Text(s.roomId ?? cls.roomName, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode))),
+                          child: Text(provider.roomDisplayName(s, cls), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.getTextColor(provider.isDarkMode))),
                         ),
                       ],
                     ),
@@ -698,6 +690,86 @@ class _DashboardGuruState extends State<DashboardGuru> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
           CustomButton(onClick: () => Navigator.pop(context), child: const Text('Simpan Absensi')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUpcomingReminder(AppProvider provider, List<GroupedSchedule> groupedToday) {
+    final isDark = provider.isDarkMode;
+    
+    // Cari jadwal yang belum mulai (upcoming)
+    final upcoming = groupedToday.where((g) => 
+      !g.isEvent && 
+      !provider.isScheduleGroupActive(g.entries, provider.currentDayName) &&
+      !provider.isScheduleGroupPassed(g.entries, provider.currentDayName)
+    ).toList();
+
+    final pendingValidations = provider.getPendingValidationSessions(provider.currentUser.id);
+
+    if (upcoming.isEmpty && pendingValidations.isEmpty) return const SizedBox.shrink();
+
+    return CustomCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(LucideIcons.bell, color: AppColors.primary, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                'Aktivitas Mendatang',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.getTextColor(isDark)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (upcoming.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.calendar, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Jadwal Berikutnya: ${upcoming.first.entries.first.classId}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        Text(
+                          '${provider.subjectDisplayName(upcoming.first.entries.first.subjectId ?? "")} — Pukul ${upcoming.first.timeRange.split(" - ")[0]}',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  CustomBadge(variant: BadgeVariant.indigo, child: const Text('SEGERA DATANG')),
+                ],
+              ),
+            ),
+          ],
+          if (pendingValidations.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(
+              children: [
+                const Icon(LucideIcons.clipboardCheck, size: 16, color: AppColors.warning),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Anda memiliki ${pendingValidations.length} sesi absensi yang menunggu validasi.',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => provider.setActiveMenu('validasi_absensi'),
+                  child: const Text('Validasi Sekarang'),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

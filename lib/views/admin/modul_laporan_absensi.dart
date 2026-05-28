@@ -15,6 +15,9 @@ import '../../models/subject.dart';
 import '../../widgets/export_attendance_dialog.dart';
 import '../../services/attendance_export_service.dart';
 import '../../core/chronos_service.dart';
+import '../../models/teacher.dart';
+import '../../models/teacher_attendance.dart';
+import '../../widgets/app_avatar.dart';
 
 class ModulLaporanAbsensi extends StatefulWidget {
   const ModulLaporanAbsensi({super.key});
@@ -29,6 +32,8 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
   DateTime _endDate = ChronosService.instance.now();
   String _dailyRange = 'Hari Ini';
   String? _detailClassId; // If null, show summary. If not null, show detail for this class.
+  int _teacherCurrentPage = 1;
+  final int _itemsPerPage = 10;
   
   @override
   void initState() {
@@ -58,6 +63,7 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
               children: [
                 _buildTabItem(0, 'Monitor Harian'),
                 _buildTabItem(1, 'Rekap Bulanan'),
+                _buildTabItem(2, 'Kehadiran Guru'),
               ],
             ),
           ),
@@ -67,7 +73,9 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
         ],
 
         // Content
-        _activeTab == 0 ? _buildDailyMonitor(provider) : _buildMonthlyRecap(provider),
+        _activeTab == 0
+            ? _buildDailyMonitor(provider)
+            : (_activeTab == 1 ? _buildMonthlyRecap(provider) : _buildTeacherReport(provider)),
       ],
     );
   }
@@ -327,13 +335,22 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
                 }).toList();
 
                 int h = 0, s = 0, i = 0, a = 0;
-                for (final student in classStudents) {
-                  final studentAtt = classAtt.where((record) => record.studentId == student.id).toList();
-                  if (studentAtt.isEmpty) { a++; continue; }
-                  if (studentAtt.any((r) => r.status == AttendanceStatus.sakit)) s++;
-                  else if (studentAtt.any((r) => r.status == AttendanceStatus.izin)) i++;
-                  else if (studentAtt.any((r) => r.status == AttendanceStatus.alpa)) a++;
-                  else h++;
+                if (classAtt.isNotEmpty) {
+                  for (final student in classStudents) {
+                    final studentAtt = classAtt.where((record) => record.studentId == student.id).toList();
+                    if (studentAtt.isEmpty) {
+                      a++;
+                      continue;
+                    }
+                    if (studentAtt.any((r) => r.status == AttendanceStatus.sakit))
+                      s++;
+                    else if (studentAtt.any((r) => r.status == AttendanceStatus.izin))
+                      i++;
+                    else if (studentAtt.any((r) => r.status == AttendanceStatus.alpa))
+                      a++;
+                    else
+                      h++;
+                  }
                 }
 
                 final dateRangeText = DateFormat('dd/MM').format(_startDate) + ' - ' + DateFormat('dd/MM').format(_endDate);
@@ -653,7 +670,20 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
               );
               final statusStr = att.id.isEmpty ? '-' : att.status.name.substring(0, 1).toUpperCase();
               final color = att.id.isEmpty ? AppColors.textMuted : _getStatusColor(att.status);
-              return _cellText(statusStr, 100, color: color);
+              return Container(
+                width: 100,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(statusStr, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                    if (att.id.isNotEmpty && att.validationStatus == ValidationStatus.validated)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Icon(LucideIcons.checkCircle2, size: 10, color: AppColors.success),
+                      ),
+                  ],
+                ),
+              );
             }),
           Container(
             width: 250,
@@ -674,6 +704,9 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
 
   Widget _buildMonthlyDetailRow(int no, Student student, List<Attendance> attendance) {
     final studentAtt = attendance.where((a) => a.studentId == student.id).toList();
+    // Sort by date descending
+    studentAtt.sort((a, b) => b.date.compareTo(a.date));
+    
     final h = studentAtt.where((a) => a.status == AttendanceStatus.hadir).length;
     final s = studentAtt.where((a) => a.status == AttendanceStatus.sakit).length;
     final i = studentAtt.where((a) => a.status == AttendanceStatus.izin).length;
@@ -686,8 +719,104 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
           Expanded(flex: 1, child: Text('$no', style: const TextStyle(color: AppColors.textMuted))),
           Expanded(flex: 4, child: Text(student.name, style: const TextStyle(fontWeight: FontWeight.bold))),
           Expanded(
-            flex: 6,
+            flex: 5,
             child: Text('Hadir: $h  Sakit: $s  Alpa: $a  Izin: $i', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+          Expanded(
+            flex: 1,
+            child: IconButton(
+              icon: const Icon(LucideIcons.history, size: 20, color: AppColors.primary),
+              tooltip: 'Lihat Riwayat Riil',
+              onPressed: () => _showStudentHistoryDialog(context, student, studentAtt),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStudentHistoryDialog(BuildContext context, Student student, List<Attendance> records) {
+    final provider = Provider.of<AppProvider>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.user, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(student.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Riwayat Kehadiran (${records.length} Sesi)', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.x, size: 20),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+        content: Container(
+          width: 500,
+          height: 400,
+          child: Column(
+            children: [
+              const Divider(),
+              Expanded(
+                child: records.isEmpty 
+                  ? const Center(child: Text('Tidak ada riwayat absensi.'))
+                  : ListView.separated(
+                      itemCount: records.length,
+                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final record = records[index];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Row(
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    DateFormat('dd MMM yyyy').format(record.date),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  Text(
+                                    record.slotLabel,
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Text(
+                                  provider.subjectDisplayName(record.subjectId),
+                                  style: const TextStyle(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              CustomBadge(
+                                variant: _getBadgeVariant(record.status),
+                                child: Text(record.statusLabel),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
           ),
         ],
       ),
@@ -744,5 +873,250 @@ class _ModulLaporanAbsensiState extends State<ModulLaporanAbsensi> {
 
   Widget _buildFilterItem({required String label, required Widget child}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textMuted)), const SizedBox(height: 6), child]);
+  }
+
+  Widget _buildTeacherReport(AppProvider provider) {
+    final summary = provider.getAllTeachersAttendanceSummary(month: _startDate);
+    final teachers = provider.teachers;
+    
+    // Pagination logic
+    final totalTeachers = teachers.length;
+    final totalPages = (totalTeachers / _itemsPerPage).ceil();
+    final startIndex = (_teacherCurrentPage - 1) * _itemsPerPage;
+    final endIndex = (startIndex + _itemsPerPage > totalTeachers) ? totalTeachers : startIndex + _itemsPerPage;
+    final displayedTeachers = (totalTeachers > 0) ? teachers.sublist(startIndex, endIndex) : [];
+
+    return Column(
+      children: [
+        CustomCard(
+          noPadding: true,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                color: const Color(0xFFF8FAFC),
+                child: const Row(
+                  children: [
+                    Expanded(flex: 1, child: Text('NO', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+                    Expanded(flex: 4, child: Text('GURU', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+                    Expanded(flex: 3, child: Text('TOTAL JAM', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary))),
+                    Expanded(flex: 6, child: Center(child: Text('PERBANDINGAN KEHADIRAN (HADIR / TIDAK)', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)))),
+                    Expanded(flex: 1, child: SizedBox()), // Placeholder for action tooltip
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              if (teachers.isEmpty)
+                const Padding(padding: EdgeInsets.all(60), child: Center(child: Text('Tidak ada data guru.')))
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: displayedTeachers.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final teacher = displayedTeachers[index];
+                    final stats = summary[teacher.id] ?? {'total': 0, 'hadir': 0, 'tidakHadir': 0};
+                    final teacherRecords = provider.teacherAttendance.where((ta) => ta.teacherId == teacher.id || ta.teacherId == teacher.name).toList();
+                    return _buildTeacherSummaryRow(startIndex + index + 1, teacher, stats, teacherRecords);
+                  },
+                ),
+              // Pagination inside card
+              if (totalPages > 1) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Halaman $_teacherCurrentPage dari $totalPages',
+                        style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(LucideIcons.chevronLeft, size: 20),
+                        onPressed: _teacherCurrentPage > 1 ? () => setState(() => _teacherCurrentPage--) : null,
+                        color: _teacherCurrentPage > 1 ? AppColors.textSecondary : AppColors.textMuted.withOpacity(0.3),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 24),
+                      IconButton(
+                        icon: const Icon(LucideIcons.chevronRight, size: 20),
+                        onPressed: _teacherCurrentPage < totalPages ? () => setState(() => _teacherCurrentPage++) : null,
+                        color: _teacherCurrentPage < totalPages ? AppColors.textSecondary : AppColors.textMuted.withOpacity(0.3),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTeacherSummaryRow(int no, Teacher teacher, Map<String, int> stats, List<TeacherAttendance> records) {
+    final hadir = stats['hadir'] ?? 0;
+    final tidakHadir = stats['tidakHadir'] ?? 0;
+    final total = stats['total'] ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      child: Row(
+        children: [
+          Expanded(flex: 1, child: Text('$no', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textMuted))),
+          Expanded(flex: 4, child: Text(teacher.name, style: const TextStyle(fontWeight: FontWeight.bold))),
+          Expanded(flex: 3, child: Text('$total Jam')),
+          
+          // Proportional Bar
+          Expanded(
+            flex: 6,
+            child: Container(
+              height: 32,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFFF1F5F9),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: hadir > 0 ? hadir : 1,
+                      child: Container(
+                        color: AppColors.success.withOpacity(0.15),
+                        alignment: Alignment.center,
+                        child: Text('$hadir Jam', style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
+                    ),
+                    Container(width: 1, color: Colors.white),
+                    Expanded(
+                      flex: tidakHadir > 0 ? tidakHadir : 1,
+                      child: Container(
+                        color: AppColors.danger.withOpacity(0.15),
+                        alignment: Alignment.center,
+                        child: Text('$tidakHadir Jam', style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          
+          Expanded(
+            flex: 1,
+            child: IconButton(
+              icon: const Icon(LucideIcons.history, size: 20, color: AppColors.primary),
+              tooltip: 'Lihat Riwayat',
+              onPressed: () => _showTeacherHistoryDialog(context, teacher, records),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTeacherHistoryDialog(BuildContext context, Teacher teacher, List<TeacherAttendance> records) {
+    // Sort by date descending
+    records.sort((a, b) => b.date.compareTo(a.date));
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+             AppAvatar(radius: 18, imageUrl: teacher.avatar, name: teacher.name),
+             const SizedBox(width: 12),
+             Expanded(
+               child: Column(
+                 crossAxisAlignment: CrossAxisAlignment.start,
+                 children: [
+                   Text(teacher.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                   const Text('Riwayat Kehadiran Guru', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                 ],
+               ),
+             ),
+             IconButton(icon: const Icon(LucideIcons.x, size: 20), onPressed: () => Navigator.pop(context)),
+          ],
+        ),
+        content: Container(
+          width: 500,
+          height: 400,
+          child: records.isEmpty 
+            ? const Center(child: Text('Belum ada riwayat kehadiran.'))
+            : ListView.builder(
+                itemCount: records.length,
+                itemBuilder: (context, index) {
+                  final r = records[index];
+                  final isAbsent = r.status == TeacherAttendanceStatus.tidakHadir;
+                  
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isAbsent ? AppColors.danger.withOpacity(0.05) : AppColors.success.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: (isAbsent ? AppColors.danger : AppColors.success).withOpacity(0.1)),
+                    ),
+                    child: Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                             Text(
+                               '${r.date.day}/${r.date.month}/${r.date.year}', 
+                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                             ),
+                             Text(r.slotLabel, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                          ],
+                        ),
+                        const Spacer(),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isAbsent ? AppColors.danger : AppColors.success,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                r.statusLabel.toUpperCase(),
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (isAbsent && r.reasonLabel.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Alasan: ${r.reasonLabel}',
+                                  style: const TextStyle(fontSize: 10, color: AppColors.danger, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+        ),
+      ),
+    );
+  }
+
+  BadgeVariant _getBadgeVariant(AttendanceStatus status) {
+    switch (status) {
+      case AttendanceStatus.hadir: return BadgeVariant.success;
+      case AttendanceStatus.izin: return BadgeVariant.warning;
+      case AttendanceStatus.sakit: return BadgeVariant.indigo;
+      case AttendanceStatus.alpa: return BadgeVariant.danger;
+      default: return BadgeVariant.defaultValue;
+    }
   }
 }

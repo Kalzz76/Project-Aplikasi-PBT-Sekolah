@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/app_provider.dart';
 import '../core/app_colors.dart';
 
-enum ButtonVariant { primary, secondary, danger, outline, ghost }
+enum ButtonVariant { primary, secondary, success, danger, outline, ghost }
 enum ButtonSize { sm, md, lg }
 
 class CustomButton extends StatelessWidget {
@@ -28,31 +30,38 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark || 
+                   Provider.of<AppProvider>(context, listen: false).isDarkMode;
+
     Color bgColor;
     Color textColor;
     BorderSide border = BorderSide.none;
 
     switch (variant) {
       case ButtonVariant.primary:
-        bgColor = AppColors.primary;
+        bgColor = isDark ? const Color(0xFF6366F1) : AppColors.primary;
         textColor = Colors.white;
         break;
       case ButtonVariant.secondary:
-        bgColor = const Color(0xFFF1F5F9);
-        textColor = const Color(0xFF334155);
+        bgColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+        textColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF334155);
+        break;
+      case ButtonVariant.success:
+        bgColor = isDark ? const Color(0xFF065F46).withOpacity(0.5) : AppColors.success;
+        textColor = isDark ? const Color(0xFF34D399) : Colors.white;
         break;
       case ButtonVariant.danger:
-        bgColor = AppColors.dangerBg;
-        textColor = AppColors.danger;
+        bgColor = isDark ? const Color(0xFF7F1D1D).withOpacity(0.4) : AppColors.dangerBg;
+        textColor = isDark ? const Color(0xFFF87171) : AppColors.danger;
         break;
       case ButtonVariant.outline:
-        bgColor = Colors.white;
-        textColor = const Color(0xFF334155);
-        border = const BorderSide(color: Color(0xFFCBD5E1));
+        bgColor = isDark ? Colors.white.withOpacity(0.02) : Colors.white;
+        textColor = isDark ? const Color(0xFFF1F5F9) : const Color(0xFF334155);
+        border = BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1));
         break;
       case ButtonVariant.ghost:
         bgColor = Colors.transparent;
-        textColor = const Color(0xFF475569);
+        textColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569);
         break;
     }
 

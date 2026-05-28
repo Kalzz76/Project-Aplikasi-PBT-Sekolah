@@ -34,15 +34,24 @@ class AppColors {
   static const Color textSecondary = Color(0xFF64748B); // Slate 500
   static const Color textMuted = Color(0xFF94A3B8); // Slate 400
 
-  // Dark Mode Variants
-  static const Color darkBg = Color(0xFF0F172A);
-  static const Color darkCard = Color(0xFF1E293B);
-  static const Color darkBorder = Color(0xFF334155);
-  static const Color darkText = Colors.white;
-  static const Color darkTextSecondary = Color(0xFF94A3B8);
+  // Dark Mode Variants (Premium Deep Palette)
+  static const Color darkBg = Color(0xFF0F172A); // Deep Slate
+  static const Color darkCard = Color(0xFF1E293B); // Slate 800
+  static const Color darkBorder = Color(0xFF334155); // Slate 700
+  static const Color darkText = Color(0xFFF8FAFC); // Slate 50
+  static const Color darkTextSecondary = Color(0xFF94A3B8); // Slate 400
+  
+  // Indigo Accents for Dark Mode
+  static const Color darkAccent = Color(0xFF6366F1); // Indigo 500
+  static const Color darkGlow = Color(0xFF4F46E5); // Indigo 600
 
   static Color getBgColor(bool isDark) => isDark ? darkBg : background;
   static Color getCardColor(bool isDark) => isDark ? darkCard : card;
   static Color getBorderColor(bool isDark) => isDark ? darkBorder : border;
   static Color getTextColor(bool isDark) => isDark ? darkText : textPrimary;
+  
+  // Glassmorphism helper
+  static Color getGlassColor(bool isDark) => isDark 
+      ? Colors.white.withOpacity(0.03) 
+      : Colors.white.withOpacity(0.7);
 }

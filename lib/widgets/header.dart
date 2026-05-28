@@ -21,10 +21,13 @@ class Header extends StatelessWidget {
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: provider.isDarkMode ? Colors.black.withOpacity(0.2) : Colors.white,
+        color: provider.isDarkMode ? Colors.white.withOpacity(0.02) : Colors.white,
         border: Border(bottom: BorderSide(color: provider.isDarkMode ? Colors.white.withOpacity(0.05) : AppColors.border)),
       ),
-      child: Row(
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: provider.isDarkMode ? ImageFilter.blur(sigmaX: 10, sigmaY: 10) : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
+          child: Row(
         children: [
           // Hamburger button di mobile
           if (showMenuButton) ...[
@@ -104,6 +107,77 @@ class Header extends StatelessWidget {
             tooltip: 'Ganti Mode',
           ),
 
+          // Notifications
+          PopupMenuButton<String>(
+            offset: const Offset(0, 48),
+            itemBuilder: (context) {
+              final userNotifs = provider.getNotificationsForUser(provider.currentUser.id);
+              if (userNotifs.isEmpty) {
+                return [
+                  const PopupMenuItem(
+                    enabled: false,
+                    child: Center(child: Text('Tidak ada notifikasi', style: TextStyle(fontSize: 13, color: AppColors.textMuted))),
+                  )
+                ];
+              }
+              return userNotifs.take(5).map((n) {
+                return PopupMenuItem(
+                  value: n.id,
+                  child: Container(
+                    width: 300,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: n.isRead ? Colors.transparent : AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(n.title, style: TextStyle(fontWeight: n.isRead ? FontWeight.normal : FontWeight.bold, fontSize: 13))),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(n.message, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${n.timestamp.hour}:${n.timestamp.minute.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList();
+            },
+            onSelected: (id) => provider.markNotificationAsRead(id),
+            child: Stack(
+              children: [
+                Icon(
+                  LucideIcons.bell,
+                  size: 20,
+                  color: provider.isDarkMode ? Colors.white70 : AppColors.textMuted,
+                ),
+                if (provider.getNotificationsForUser(provider.currentUser.id).any((n) => !n.isRead))
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: AppColors.danger, shape: BoxShape.circle),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
           const SizedBox(width: 16),
           const VerticalDivider(width: 1, indent: 20, endIndent: 20, color: AppColors.border),
           const SizedBox(width: 16),
@@ -152,7 +226,9 @@ class Header extends StatelessWidget {
               ),
             ],
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
 

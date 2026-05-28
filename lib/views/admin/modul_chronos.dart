@@ -87,37 +87,54 @@ class ModulChronos extends StatelessWidget {
         const SizedBox(height: 20),
 
         if (provider.chronosEnabled) ...[
-          // Day Picker
-          const Text('Pilih Hari', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+          // Date Picker
+          const Text('Pilih Tanggal', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
           const SizedBox(height: 10),
-          Row(
-            children: _days.entries.map((e) {
-              final isSelected = provider.chronosDay == e.key;
-              final color = _dayColors[e.key] ?? AppColors.primary;
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () => provider.setChronosDay(e.key),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: isSelected ? color : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: isSelected ? color : AppColors.border, width: isSelected ? 2 : 1),
-                      boxShadow: isSelected ? [BoxShadow(color: color.withOpacity(0.25), blurRadius: 12, offset: const Offset(0, 4))] : [],
-                    ),
-                    child: Text(e.value,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.bold,
-                        color: isSelected ? Colors.white : AppColors.textSecondary,
+          _SectionCard(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Tanggal Virtual Saat Ini', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${provider.chronosDayName}, ${provider.chronosDate.day}/${provider.chronosDate.month}/${provider.chronosDate.year}',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              );
-            }).toList(),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: provider.chronosDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2030),
+                      builder: (context, child) {
+                        return Theme(
+                          data: Theme.of(context).copyWith(
+                            colorScheme: const ColorScheme.light(primary: Color(0xFF6366F1)),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+                    if (picked != null) provider.setChronosDate(picked);
+                  },
+                  icon: const Icon(Icons.calendar_month, size: 18),
+                  label: const Text('Buka Kalender'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -132,10 +149,15 @@ class ModulChronos extends StatelessWidget {
                   children: [
                     _TimeBox(label: 'Jam', value: provider.chronosHour.toString().padLeft(2, '0')),
                     const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: 10),
                       child: Text(':', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.primary)),
                     ),
                     _TimeBox(label: 'Menit', value: provider.chronosMinute.toString().padLeft(2, '0')),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 10),
+                      child: Text(':', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    ),
+                    _TimeBox(label: 'Detik', value: provider.chronosSecond.toString().padLeft(2, '0')),
                   ],
                 ),
                 const SizedBox(height: 20),

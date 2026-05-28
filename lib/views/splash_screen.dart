@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_flutter/lucide_flutter.dart';
 import '../models/user.dart';
+import '../widgets/app_logo.dart';
+import '../core/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   final Function(UserRole) onRoleSelected;
@@ -242,23 +244,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         children: [
                           Transform.scale(
                             scale: _logoScale.value,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                const Icon(LucideIcons.bookOpen, color: Colors.white, size: 96, shadows: [Shadow(color: Color(0x66BFDBFE), blurRadius: 20)]),
-                                Positioned(
-                                  top: -16,
-                                  right: -16,
-                                  child: Opacity(
-                                    opacity: _capOpacity.value,
-                                    child: Transform.translate(
-                                      offset: Offset(0, _capY.value),
-                                      child: const Icon(LucideIcons.graduationCap, color: Color(0xFF93C5FD), size: 40),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                            child: Icon(LucideIcons.graduationCap, size: 100, color: Colors.white),
                           ),
                           const SizedBox(height: 24),
                           Opacity(

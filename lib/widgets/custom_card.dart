@@ -47,36 +47,60 @@ class _CustomCardState extends State<CustomCard> {
       ),
     );
 
+    final cardColor = widget.color ?? AppColors.getCardColor(isDark);
+    
+    Widget cardDecoration = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      transform: canHover && _isHovered 
+          ? (Matrix4.identity()..translate(0.0, -4.0, 0.0)) 
+          : Matrix4.identity(),
+      decoration: BoxDecoration(
+        color: isDark ? cardColor.withOpacity(0.4) : cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: canHover && _isHovered 
+              ? AppColors.primary.withOpacity(isDark ? 0.8 : 0.4) 
+              : (isDark ? Colors.white.withOpacity(0.08) : AppColors.getBorderColor(false)),
+          width: isDark ? 1.0 : 1.0,
+        ),
+        boxShadow: isDark 
+          ? [
+              BoxShadow(
+                color: Colors.black.withOpacity(_isHovered && canHover ? 0.4 : 0.2),
+                blurRadius: _isHovered && canHover ? 20 : 12,
+                offset: const Offset(0, 8),
+              ),
+              if (_isHovered && canHover)
+                BoxShadow(
+                  color: AppColors.primary.withOpacity(0.15),
+                  blurRadius: 25,
+                  spreadRadius: -5,
+                ),
+            ]
+          : [
+              BoxShadow(
+                color: Colors.black.withOpacity(_isHovered && canHover ? 0.12 : 0.05),
+                blurRadius: _isHovered && canHover ? 16 : 10,
+                offset: Offset(0, _isHovered && canHover ? 8 : 4),
+              ),
+            ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: isDark 
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: innerContent,
+              )
+            : innerContent,
+      ),
+    );
+
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        transform: canHover && _isHovered 
-            ? (Matrix4.identity()..translate(0.0, -4.0, 0.0)) 
-            : Matrix4.identity(),
-        decoration: BoxDecoration(
-          color: widget.color ?? AppColors.getCardColor(isDark).withOpacity(isDark ? 0.05 : 1.0),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: canHover && _isHovered 
-                ? AppColors.primary.withOpacity(isDark ? 0.6 : 0.3) 
-                : (isDark ? Colors.white.withOpacity(0.1) : AppColors.getBorderColor(false)),
-            width: isDark ? 1.5 : 1.0,
-          ),
-          boxShadow: isDark ? [
-             BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
-          ] : [
-            BoxShadow(
-              color: Colors.black.withOpacity(_isHovered && canHover ? 0.12 : 0.05),
-              blurRadius: _isHovered && canHover ? 16 : 10,
-              offset: Offset(0, _isHovered && canHover ? 8 : 4),
-            ),
-          ],
-        ),
-          child: innerContent,
-      ),
+      child: cardDecoration,
     );
   }
 }
