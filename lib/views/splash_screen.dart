@@ -6,8 +6,9 @@ import '../core/app_colors.dart';
 
 class SplashScreen extends StatefulWidget {
   final Function(UserRole) onRoleSelected;
+  final VoidCallback? onFinished;
   final bool skipAnimation;
-  const SplashScreen({super.key, required this.onRoleSelected, this.skipAnimation = false});
+  const SplashScreen({super.key, required this.onRoleSelected, this.onFinished, this.skipAnimation = false});
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
@@ -113,6 +114,15 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     if (widget.skipAnimation) {
       _ctrl.value = 1.0;
     } else {
+      // Listener to trigger onFinished when splash logo phase is done
+      bool finishedCalled = false;
+      _ctrl.addListener(() {
+        if (_ctrl.value >= 0.48 && !finishedCalled) {
+          finishedCalled = true;
+          widget.onFinished?.call();
+        }
+      });
+
       // Add a slight delay before starting to prevent initial frame lag
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) _ctrl.forward();

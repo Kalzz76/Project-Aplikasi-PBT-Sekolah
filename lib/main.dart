@@ -60,15 +60,11 @@ class _AppEntryState extends State<_AppEntry> {
   UserRole? _selectedRole;
   bool _wasLoggedIn = false; // Flag untuk mendeteksi transisi logout
   bool _hasSeenSplash = false;
+  bool _splashAnimationFinished = false;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-
-    // Jika sedang login, otomatis tandai sudah melihat splash (untuk antisipasi auto-login)
-    if (provider.isLoggedIn && !_hasSeenSplash) {
-      _hasSeenSplash = true;
-    }
 
     // DETEKSI LOGOUT: Hanya reset role jika status berubah dari login -> tidak login
     if (provider.isLoggedIn && !_wasLoggedIn) {
@@ -81,24 +77,33 @@ class _AppEntryState extends State<_AppEntry> {
           setState(() {
             _selectedRole = null;
             _hasSeenSplash = true; // Pastikan skip splash saat logout
+            _splashAnimationFinished = true;
           });
         }
       });
     }
 
-    // 1. Jika sudah login, tampilkan Dashboard
-    if (provider.isLoggedIn) {
+    // 1. Jika sudah login dan animasi splash pembuka selesai
+    if (provider.isLoggedIn && _splashAnimationFinished) {
       return const MainLayout();
     }
 
-    // 2. Jika belum pilih role, tampilkan Splash + Role Selection
-    if (_selectedRole == null) {
+    // 2. Jika belum pilih role, atau masih menunggu animasi splash pembuka
+    if (_selectedRole == null || (provider.isLoggedIn && !_splashAnimationFinished)) {
       return SplashScreen(
         skipAnimation: _hasSeenSplash,
+        onFinished: () {
+          if (mounted) {
+            setState(() {
+              _splashAnimationFinished = true;
+            });
+          }
+        },
         onRoleSelected: (role) {
           setState(() {
             _selectedRole = role;
             _hasSeenSplash = true;
+            _splashAnimationFinished = true;
           });
         },
       );
